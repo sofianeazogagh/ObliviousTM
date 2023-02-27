@@ -122,21 +122,19 @@ pub fn blind_array_access2d() {
     let message_modulus = 1u64 << 4;
 
     // Our input message
-    let input_message_1 = 1u64;
+    let column = 1u64;
+    let line = 2;
 
+    // let input_message_final = 16u64 + line;
 
-    let input_baacc2d = 3;
-
-    // let input_message_final = 16u64 + input_baacc2d;
-
-    let input_message_final = 16u64 + input_baacc2d;
+    let input_message_final = 16u64 + line;
 
 
     // Delta used to encode 4 bits of message + a bit of padding on u64
     let delta = (1_u64 << 63) / message_modulus;
 
     // Apply our encoding
-    let plaintext_1 = Plaintext(input_message_1 * delta);
+    let plaintext_1 = Plaintext(column * delta);
     let plaintext_final = Plaintext(input_message_final*delta);
 
     // Allocate a new LweCiphertext and encrypt our plaintext
@@ -165,12 +163,19 @@ pub fn blind_array_access2d() {
         SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
 
 
-    let mut array2d: Vec<Vec<u64>> = Vec::new();
-    for i in 0..message_modulus-1{
-        let mut f1 = vec![0_u64;message_modulus as usize];
-        for (j,f1) in f1.iter_mut().enumerate(){ *f1 = i*j as u64} // f = [0,..,message_modulus]
-        array2d.push(f1.clone());
-    }
+    // let mut array2d: Vec<Vec<u64>> = Vec::new();
+    // for i in 0..message_modulus-1{
+    //     let mut f1 = vec![0_u64;message_modulus as usize];
+    //     for (j,f1) in f1.iter_mut().enumerate(){ *f1 = i*j as u64} // f = [0,..,message_modulus]
+    //     array2d.push(f1.clone());
+    // }
+
+    let array2d = vec![
+        vec![0,1,2,3],
+        vec![4,5,6,7],
+        vec![8,9,10,11],
+        vec![12,13,14,15]
+    ];
 
     // let accumulator1_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f1.clone(),);
 
@@ -250,7 +255,7 @@ pub fn blind_array_access2d() {
         signed_decomposer.closest_representable(pbs_plaintext_final.0) / delta;
 
     println!("Checking result...");
-    println!("BACC2D input {input_baacc2d}, got {pbs_result_final}");
+    println!("BACC2D input ({line},{column}) got {pbs_result_final}");
 
 
 }
@@ -393,7 +398,7 @@ fn generate_accumulator_via_vector(
     let mut accumulator_u64 = vec![0_u64; polynomial_size.0];
 
     // Fill each box with the encoded denoised value
-    for i in 0..message_modulus {
+    for i in 0..f.len() {
         let index = i * box_size;
         // accumulator_u64[index..index + box_size].iter_mut().for_each(|a| *a = f(i as u64) * delta);
         for j in index..index + box_size {
