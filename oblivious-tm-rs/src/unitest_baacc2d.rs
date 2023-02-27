@@ -1,6 +1,7 @@
+use num_complex::Complex;
 use tfhe::core_crypto::prelude::*;
+use aligned_vec::{ABox};
 
-use std::time::{Instant};
 
 pub fn blind_array_access2d() {
     // DISCLAIMER: these toy example parameters are not guaranteed to be secure or yield correct
@@ -15,10 +16,10 @@ pub fn blind_array_access2d() {
     let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
     let pbs_base_log = DecompositionBaseLog(23);
     let pbs_level = DecompositionLevelCount(1);
-    let ks_level = DecompositionLevelCount(5);
     let ks_base_log = DecompositionBaseLog(3);
-    let pfks_level = DecompositionLevelCount(1); //2
+    let ks_level = DecompositionLevelCount(5);
     let pfks_base_log = DecompositionBaseLog(23); //15
+    let pfks_level = DecompositionLevelCount(1); //2
     let pfks_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
 
     // Request the best seeder possible, starting with hardware entropy sources and falling back to
@@ -121,14 +122,10 @@ pub fn blind_array_access2d() {
     let message_modulus = 1u64 << 4;
 
     // Our input message
-    let input_message_1 = 0u64;
-    let input_message_2 = 1u64;
-    let input_message_3 = 2u64;
-    let input_message_4 = 3u64;
-    let input_message_5 = 4u64;
+    let input_message_1 = 1u64;
 
 
-    let input_baacc2d = 1;
+    let input_baacc2d = 3;
 
     // let input_message_final = 16u64 + input_baacc2d;
 
@@ -140,45 +137,12 @@ pub fn blind_array_access2d() {
 
     // Apply our encoding
     let plaintext_1 = Plaintext(input_message_1 * delta);
-    let plaintext_2 = Plaintext(input_message_2 * delta);
-    let plaintext_3 = Plaintext(input_message_3 * delta);
-    let plaintext_4 = Plaintext(input_message_4 * delta);
-    let plaintext_5 = Plaintext(input_message_5 * delta);
-
     let plaintext_final = Plaintext(input_message_final*delta);
 
     // Allocate a new LweCiphertext and encrypt our plaintext
     let lwe_ciphertext_1: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
         &small_lwe_sk,
         plaintext_1,
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    let lwe_ciphertext_2: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
-        &small_lwe_sk,
-        plaintext_2,
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    let lwe_ciphertext_3: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
-        &small_lwe_sk,
-        plaintext_3,
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    let lwe_ciphertext_4: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
-        &small_lwe_sk,
-        plaintext_4,
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    let lwe_ciphertext_5: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
-        &small_lwe_sk,
-        plaintext_5,
         lwe_modular_std_dev,
         &mut encryption_generator,
     );
@@ -192,105 +156,195 @@ pub fn blind_array_access2d() {
 
 
 
+
+
     // Create a SignedDecomposer to perform the rounding of the decrypted plaintext
     // We pass a DecompositionBaseLog of 5 and a DecompositionLevelCount of 1 indicating we want to
     // round the 5 MSB, 1 bit of padding plus our 4 bits of message
     let signed_decomposer =
         SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
 
-    let mut f1 = vec![0_u64;message_modulus as usize];
-    for (i,f1) in f1.iter_mut().enumerate(){ *f1 = i as u64} // f = [0,..,message_modulus]
 
+    let mut array2d: Vec<Vec<u64>> = Vec::new();
+    for i in 0..message_modulus-1{
+        let mut f1 = vec![0_u64;message_modulus as usize];
+        for (j,f1) in f1.iter_mut().enumerate(){ *f1 = i*j as u64} // f = [0,..,message_modulus]
+        array2d.push(f1.clone());
+    }
 
-    let accumulator1_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f1.clone(),);
+    // let accumulator1_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f1.clone(),);
 
-    // Generate the accumulator for our multiplication by 2 using a simple closure
-    let accumulator1: GlweCiphertextOwned<u64> = encrypt_accumulator_as_glwe_ciphertext(
-        &glwe_sk,
-        glwe_modular_std_dev,
-        &mut encryption_generator,
-        polynomial_size,
-        glwe_dimension.to_glwe_size(),
-        accumulator1_u64
-    );
+    let mut accumulators: Vec<GlweCiphertextOwned<u64>> = Vec::new();
+    for f in array2d.clone(){
+        let accumulator_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f.clone(),);
+        // Generate the accumulator for our multiplication by 2 using a simple closure
+        let accumulator: GlweCiphertextOwned<u64> = encrypt_accumulator_as_glwe_ciphertext(
+            &glwe_sk,
+            glwe_modular_std_dev,
+            &mut encryption_generator,
+            polynomial_size,
+            glwe_dimension.to_glwe_size(),
+            accumulator_u64);
+        accumulators.push(accumulator);
+    }
 
+        // let mut pbs_results:Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 
-
-    // Allocate the LweCiphertext to store the result of the PBS
-    let mut pbs_ct1 =
-        LweCiphertext::new(0u64, big_lwe_sk.lwe_dimension().to_lwe_size());
+        // for acc in accumulators{
+        //     let mut pbs_ct =
+        //     LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+        //     programmable_bootstrap_lwe_ciphertext(
+        //         &lwe_ciphertext_1,
+        //         &mut pbs_ct,
+        //         &acc,
+        //         &fourier_bsk,);
+        //     pbs_results.push(pbs_ct.clone());
     
-    let start_pbs = Instant::now();
-    programmable_bootstrap_lwe_ciphertext(
-        &lwe_ciphertext_1,
-        &mut pbs_ct1,
-        &accumulator1,
-        &fourier_bsk,
-    );
-     let duration_pbs = start_pbs.elapsed();
+        // }
+    
+        // ////////////////////KEY SWITCHING////////////////////////
+        
+       
+        // let many_lwe= key_switch(
+        //     pbs_results.clone(), 
+        //     small_lwe_dimension, 
+        //     lwe_ksk);
+    
+        // //////////////////// LWE CIPHERTEXT PACKING////////////////////////
+        // /*
+        // Create a list of LWE ciphertext which will be converted into a GLWE ciphertext
+        // */
+        // let accumulator_final = many_lwe_to_glwe(
+        //     polynomial_size, 
+        //     small_lwe_dimension, 
+        //     message_modulus, 
+        //     many_lwe.clone(), 
+        //     delta, 
+        //     glwe_dimension, 
+        //     pfpksk);
+    
+        // //////////////////// FINAL PBS ////////////////////////
+        // let mut ct_res = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+        // programmable_bootstrap_lwe_ciphertext(&lwe_ciphertext_final, &mut ct_res, &accumulator_final, &fourier_bsk,);
 
-     println!("Duration PBS : {:?}",duration_pbs);
+    
+    let ct_res = bacc2d(
+        accumulators, 
+        big_lwe_dimension, 
+        lwe_ciphertext_1, 
+        fourier_bsk, 
+        small_lwe_dimension, 
+        lwe_ksk, 
+        polynomial_size, 
+        message_modulus, 
+        delta, 
+        glwe_dimension, 
+        pfpksk, 
+        lwe_ciphertext_final);
+    
+    // Decrypt the PBS multiplication result
+    let pbs_plaintext_final: Plaintext<u64> =
+        decrypt_lwe_ciphertext(&big_lwe_sk, &ct_res);
 
-    let mut pbs_ct2 =
-        LweCiphertext::new(0u64, big_lwe_sk.lwe_dimension().to_lwe_size());
-    programmable_bootstrap_lwe_ciphertext(
-        &lwe_ciphertext_2,
-        &mut pbs_ct2,
-        &accumulator1,
-        &fourier_bsk,
-    );
+    let pbs_result_final: u64 =
+        signed_decomposer.closest_representable(pbs_plaintext_final.0) / delta;
 
-    let mut pbs_ct3 =
-        LweCiphertext::new(0u64, big_lwe_sk.lwe_dimension().to_lwe_size());
-    programmable_bootstrap_lwe_ciphertext(
-        &lwe_ciphertext_3,
-        &mut pbs_ct3,
-        &accumulator1,
-        &fourier_bsk,
-    );
+    println!("Checking result...");
+    println!("BACC2D input {input_baacc2d}, got {pbs_result_final}");
 
-    let mut pbs_ct4 =
-        LweCiphertext::new(0u64, big_lwe_sk.lwe_dimension().to_lwe_size());
-    programmable_bootstrap_lwe_ciphertext(
-        &lwe_ciphertext_4,
-        &mut pbs_ct4,
-        &accumulator1,
-        &fourier_bsk,
-    );
 
-    let mut pbs_ct5 =
-        LweCiphertext::new(0u64, big_lwe_sk.lwe_dimension().to_lwe_size());
-    programmable_bootstrap_lwe_ciphertext(
-        &lwe_ciphertext_5,
-        &mut pbs_ct5,
-        &accumulator1,
-        &fourier_bsk,
-    );
+}
 
+pub fn bacc2d(
+    accumulators: Vec<GlweCiphertext<Vec<u64>>>, 
+    big_lwe_dimension: LweDimension, 
+    lwe_ciphertext_1: LweCiphertext<Vec<u64>>, 
+    fourier_bsk: FourierLweBootstrapKey<ABox<[Complex<f64>]>>, 
+    small_lwe_dimension: LweDimension, 
+    lwe_ksk: LweKeyswitchKey<Vec<u64>>, 
+    polynomial_size: PolynomialSize, 
+    message_modulus: u64, 
+    delta: u64, 
+    glwe_dimension: GlweDimension, 
+    pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>, 
+    lwe_ciphertext_final: LweCiphertext<Vec<u64>>
+) -> LweCiphertext<Vec<u64>>
+where
+ {
+    let mut pbs_results:Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+
+
+
+    for acc in accumulators{
+        let mut pbs_ct =
+        LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+        programmable_bootstrap_lwe_ciphertext(
+            &lwe_ciphertext_1,
+            &mut pbs_ct,
+            &acc,
+            &fourier_bsk,);
+        pbs_results.push(pbs_ct.clone());
+
+    }
 
     ////////////////////KEY SWITCHING////////////////////////
+    
+   
+    let many_lwe= key_switch(
+        pbs_results.clone(), 
+        small_lwe_dimension, 
+        lwe_ksk);
 
-    let mut pbs1_switched = LweCiphertext::new(0, small_lwe_sk.lwe_dimension().to_lwe_size());
-    let mut pbs2_switched = LweCiphertext::new(0, small_lwe_sk.lwe_dimension().to_lwe_size());
-    let mut pbs3_switched = LweCiphertext::new(0, small_lwe_sk.lwe_dimension().to_lwe_size());
-    let mut pbs4_switched = LweCiphertext::new(0, small_lwe_sk.lwe_dimension().to_lwe_size());
-    let mut pbs5_switched = LweCiphertext::new(0, small_lwe_sk.lwe_dimension().to_lwe_size());
-
-    keyswitch_lwe_ciphertext(&lwe_ksk, &pbs_ct1, &mut pbs1_switched);
-    keyswitch_lwe_ciphertext(&lwe_ksk, &pbs_ct2, &mut pbs2_switched);
-    keyswitch_lwe_ciphertext(&lwe_ksk, &pbs_ct3, &mut pbs3_switched);
-    keyswitch_lwe_ciphertext(&lwe_ksk, &pbs_ct4, &mut pbs4_switched);
-    keyswitch_lwe_ciphertext(&lwe_ksk, &pbs_ct5, &mut pbs5_switched);
-
-
-
-     //////////////////// LWE CIPHERTEXT PACKING////////////////////////
+    //////////////////// LWE CIPHERTEXT PACKING////////////////////////
     /*
     Create a list of LWE ciphertext which will be converted into a GLWE ciphertext
     */
-    // let many_lwe = vec![pbs5_switched.clone(),pbs4_switched.clone(),pbs3_switched.clone(), pbs2_switched.clone(),pbs1_switched.clone()];
-    let many_lwe = vec![pbs1_switched.clone(),pbs2_switched.clone(),pbs3_switched.clone(), pbs4_switched.clone(),pbs5_switched.clone()];
-    // let many_lwe = vec![pbs1_switched.clone(),pbs2_switched.clone()];
+    let accumulator_final = many_lwe_to_glwe(
+        polynomial_size, 
+        small_lwe_dimension, 
+        message_modulus, 
+        many_lwe.clone(), 
+        delta, 
+        glwe_dimension, 
+        pfpksk);
+
+    //////////////////// FINAL PBS ////////////////////////
+    let mut ct_res = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+    programmable_bootstrap_lwe_ciphertext(&lwe_ciphertext_final, &mut ct_res, &accumulator_final, &fourier_bsk,);
+    ct_res
+}
+
+
+
+
+fn key_switch(
+    many_lwe_wo_ks: Vec<LweCiphertext<Vec<u64>>>, 
+    small_lwe_dimension: LweDimension, 
+    lwe_ksk: LweKeyswitchKey<Vec<u64>>
+)
+-> Vec<LweCiphertext<Vec<u64>>>
+{
+    let mut many_lwe= Vec::new();
+    for ct in many_lwe_wo_ks {
+        let mut switched = LweCiphertext::new(0, small_lwe_dimension.to_lwe_size());
+        keyswitch_lwe_ciphertext(&lwe_ksk, &ct, &mut switched);
+        many_lwe.push(switched);
+    }
+
+    return many_lwe;
+}
+
+fn many_lwe_to_glwe(
+    polynomial_size: PolynomialSize, 
+    small_lwe_dimension: LweDimension, 
+    message_modulus: u64, 
+    many_lwe: Vec<LweCiphertext<Vec<u64>>>, 
+    delta: u64, 
+    glwe_dimension: GlweDimension, 
+    pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>
+) 
+-> GlweCiphertext<Vec<u64>> 
+{
     let many_lwe_as_accumulator = generate_accumulator_via_vector_of_ciphertext(
         polynomial_size,
         small_lwe_dimension, 
@@ -301,7 +355,8 @@ pub fn blind_array_access2d() {
     for ct in many_lwe_as_accumulator {
         let mut lwe = ct.into_container();
         lwe_container.append(&mut lwe);
-    } // remplir le reste du vecteur par des 0 
+    }
+    // remplir le reste du vecteur par des 0 
 
 
 
@@ -317,66 +372,7 @@ pub fn blind_array_access2d() {
         &mut accumulator_final,
         &lwe_ciphertext_list,
     );
-
-
-     //////////////////// FINAL PBS ////////////////////////
-
-
-     let mut ct_res = LweCiphertext::new(0u64, big_lwe_sk.lwe_dimension().to_lwe_size());
-     programmable_bootstrap_lwe_ciphertext(&lwe_ciphertext_final, &mut ct_res, &accumulator_final, &fourier_bsk,);
-
-
-
-    // Decrypting the packed LWE ciphertext
-    let mut plaintext_pack = PlaintextList::new(0, PlaintextCount(polynomial_size.0));
-    decrypt_glwe_ciphertext(&glwe_sk, &accumulator_final, &mut plaintext_pack);
-
-    // To round our 4 bits of message
-    // let decomposer = SignedDecomposer::new(DecompositionBaseLog(4), DecompositionLevelCount(1));
-    // In the paper we return the complicated sum times -1, so here we invert that -1, otherwise we
-    // could apply the wrapping_neg on our function and remove it here
-    // let decoded: Vec<_> = plaintext_pack
-    //     .iter()
-    //     .map(|x| (signed_decomposer.closest_representable(*x.0) / delta).wrapping_neg() % message_modulus)
-    //     .collect();
-    // // First 16 cells will contain the double of the original message modulo our message modulus and
-    // // zeros elsewhere
-    // println!("LWE Packed : {decoded:?}");
-
-    // Decrypt the PBS multiplication result
-    let pbs_plaintext1: Plaintext<u64> =
-        decrypt_lwe_ciphertext(&small_lwe_sk, &pbs1_switched);
-    // Decrypt the PBS multiplication result
-    let pbs_plaintext2: Plaintext<u64> =
-        decrypt_lwe_ciphertext(&small_lwe_sk, &pbs2_switched);
-
-    let pbs_plaintext_final: Plaintext<u64> =
-        decrypt_lwe_ciphertext(&big_lwe_sk, &ct_res);
-
-    // Round and remove our encoding
-    let pbs_result1: u64 =
-        signed_decomposer.closest_representable(pbs_plaintext1.0) / delta;
-    let pbs_result2: u64 =
-        signed_decomposer.closest_representable(pbs_plaintext2.0) / delta;
-
-    // let decomposer = SignedDecomposer::new(DecompositionBaseLog(4), DecompositionLevelCount(1));
-    let pbs_result_final: u64 =
-        signed_decomposer.closest_representable(pbs_plaintext_final.0) / delta;
-
-    println!("Checking result...");
-    println!("Expected {input_message_1}, got {pbs_result1}");
-    println!("Expected {input_message_2}, got {pbs_result2}");
-    // println!("BACC2D input {input_message_final}, got {pbs_result_final}");
-    println!("BACC2D input {input_baacc2d}, got {pbs_result_final}");
-
-
-    
-
-
-
-
-
-
+    accumulator_final
 }
 
 // Here we will define a helper function to generate an accumulator for a PBS
