@@ -1,28 +1,25 @@
-use std::intrinsics::{unchecked_add, wrapping_add};
+use std::result;
 use std::time::Instant;
 use tfhe::core_crypto::prelude::*;
 use tfhe::core_crypto::prelude::polynomial_algorithms::polynomial_wrapping_sub_mul_assign;
 
 pub fn test_sample_extract()
 {
-    let glwe_size = GlweSize(2);
-    let polynomial_size = PolynomialSize(1024);
+    let glwe_dimension = GlweDimension(1);
+    let glwe_size = glwe_dimension.to_glwe_size();
+    let polynomial_size = PolynomialSize(2048);
     let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
 
 // Create the PRNG
-    let mut seeder = new_seeder();
-    let seeder = seeder.as_mut();
+    let mut boxed_seeder = new_seeder();
+    let seeder = boxed_seeder.as_mut();
     let mut encryption_generator =
         EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
     let mut secret_generator =
         SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
 
 // Create the GlweSecretKey
-    let glwe_secret_key = allocate_and_generate_new_binary_glwe_secret_key(
-        glwe_size.to_glwe_dimension(),
-        polynomial_size,
-        &mut secret_generator,
-    );
+    let glwe_secret_key =  GlweSecretKey::generate_new_binary(glwe_dimension, polynomial_size, &mut secret_generator);
 
 // Create the plaintext
     let msg = 3u64;
@@ -75,9 +72,15 @@ pub fn test_sample_extract()
 pub fn test_sum()
 {
 
-    let glwe_size = GlweSize(2);
-    let polynomial_size = PolynomialSize(1024);
+    let small_lwe_dimension = LweDimension(742);
+    let glwe_dimension = GlweDimension(1);
+    let glwe_size = glwe_dimension.to_glwe_size();
+    let big_lwe_dimension = LweDimension(2048);
+    let polynomial_size = PolynomialSize(2048);
+    let lwe_modular_std_dev = StandardDev(0.000007069849454709433);
     let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
+    let pbs_base_log = DecompositionBaseLog(23);
+    let pbs_level = DecompositionLevelCount(1);
 
     let mut boxed_seeder = new_seeder();
     // Get a mutable reference to the seeder as a trait object from the Box returned by new_seeder
@@ -92,34 +95,27 @@ pub fn test_sum()
     let mut encryption_generator =
         EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
 
-    let msg1 = 3u64;
-    let msg2 = 4u64;
+    let msg1 = 1u64;
+    let msg2 = 2u64;
 
-    let encoded_msg1 = msg1 << 60;
-    let encoded_msg2 = msg2 << 60;
+    let delta = (1u64 << 63) / (1u64 << 4);
+
+    let encoded_msg1 = msg1 * delta;
+    let encoded_msg2 = msg2 * delta;
+
 
     let mut plaintext_list1 = PlaintextList::new(encoded_msg1, PlaintextCount(polynomial_size.0));
     let mut plaintext_list2 = PlaintextList::new(encoded_msg2, PlaintextCount(polynomial_size.0));
 
 
-// Create a new GlweCiphertext
     let mut glwe1 = GlweCiphertext::new(0u64, glwe_size, polynomial_size);
     let mut glwe2 = GlweCiphertext::new(0u64, glwe_size, polynomial_size);
+    let mut result = GlweCiphertext::new(0u64, glwe_size, polynomial_size);
 
-    let glwe_secret_key1 = allocate_and_generate_new_binary_glwe_secret_key(
-        glwe_size.to_glwe_dimension(),
-        polynomial_size,
-        &mut secret_generator,
-    );
-
-    let glwe_secret_key2 = allocate_and_generate_new_binary_glwe_secret_key(
-        glwe_size.to_glwe_dimension(),
-        polynomial_size,
-        &mut secret_generator,
-    );
+    let glwe_secret_key = GlweSecretKey::generate_new_binary(glwe_dimension, polynomial_size, &mut secret_generator);
 
     encrypt_glwe_ciphertext(
-        &glwe_secret_key1,
+        &glwe_secret_key,
         &mut glwe1,
         &plaintext_list1,
         glwe_modular_std_dev,
@@ -127,14 +123,21 @@ pub fn test_sum()
     );
 
     encrypt_glwe_ciphertext(
-        &glwe_secret_key2,
+        &glwe_secret_key,
         &mut glwe2,
         &plaintext_list2,
         glwe_modular_std_dev,
         &mut encryption_generator,
     );
 
-    assign
+
+    result.as_mut()
+        .iter_mut()
+        .zip(glwe1.as_ref().iter().zip(glwe2.as_ref().iter()))
+        .for_each(|(dst, (&lhs, &rhs))| 
+            *dst = lhs + rhs
+        );
 
 
+    
 }

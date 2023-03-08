@@ -1,4 +1,5 @@
 use tfhe::core_crypto::prelude::*;
+use tfhe::shortint::prelude::*;
 
 
 pub fn generate_accumulator<F>(
@@ -43,4 +44,5 @@ pub fn generate_accumulator<F>(
             allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext);
 
         accumulator
-    }
+}
+
