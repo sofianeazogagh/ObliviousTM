@@ -1,6 +1,6 @@
 use tfhe::core_crypto::prelude::*;
 use tfhe::shortint::prelude::*;
-
+use std::time::{Instant, Duration};
 
 pub fn generate_accumulator<F>(
         polynomial_size: PolynomialSize,
@@ -44,5 +44,20 @@ pub fn generate_accumulator<F>(
             allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext);
 
         accumulator
+}
+
+pub fn multi_run(function: fn()-> Duration, nbr_repet: u16, time: bool) {
+
+    let mut total_duration = Duration::new(0, 0);
+    for i in 1..nbr_repet+1 {
+
+        // Get duration from the execution of the function. Function must return a Duration
+        let duration = function();
+        println!("---- Run #{} : {:?} --- ", i, duration);
+        total_duration = total_duration + duration;
+    }
+
+    println!("---- Total {} runs {:?} --- ", nbr_repet, total_duration);
+
 }
 

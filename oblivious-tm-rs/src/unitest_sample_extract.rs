@@ -1,9 +1,9 @@
 use std::result;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use tfhe::core_crypto::prelude::*;
 use tfhe::core_crypto::prelude::polynomial_algorithms::polynomial_wrapping_sub_mul_assign;
 
-pub fn test_sample_extract()
+pub fn test_sample_extract() -> Duration
 {
     let glwe_dimension = GlweDimension(1);
     let glwe_size = glwe_dimension.to_glwe_size();
@@ -53,7 +53,6 @@ pub fn test_sample_extract()
     let start = Instant::now();
     extract_lwe_sample_from_glwe_ciphertext(&glwe, &mut extracted_sample, MonomialDegree(special_index));
     let duration = start.elapsed();
-    println!("Duration of sample extraction : {:?}", duration);
     let decrypted_plaintext = decrypt_lwe_ciphertext(&equivalent_lwe_sk, &extracted_sample);
 
 // Round and remove encoding
@@ -67,9 +66,11 @@ pub fn test_sample_extract()
 
     assert_eq!(special_value, recovered_message);
     println!("Success ! Expected {}, got {}", special_value, recovered_message);
+
+    duration
 }
 
-pub fn test_sum()
+pub fn test_sum() 
 {
 
     let small_lwe_dimension = LweDimension(742);

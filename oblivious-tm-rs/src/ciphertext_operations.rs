@@ -1,6 +1,4 @@
-
 use std::time::Instant;
-
 use tfhe::core_crypto::prelude::*;
 use tfhe::shortint::prelude::*;
 
