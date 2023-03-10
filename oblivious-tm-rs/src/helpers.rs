@@ -1,5 +1,6 @@
 use tfhe::core_crypto::prelude::*;
-
+use tfhe::shortint::prelude::*;
+use std::time::{Instant, Duration};
 
 pub fn generate_accumulator<F>(
         polynomial_size: PolynomialSize,
