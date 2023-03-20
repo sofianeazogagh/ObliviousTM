@@ -1,6 +1,7 @@
 use std::time::Instant;
 use tfhe::core_crypto::prelude::*;
 use tfhe::shortint::prelude::*;
+use tfhe::core_crypto::algorithms::polynomial_algorithms::*;
 
 
 pub fn test_lwe_product()
@@ -94,8 +95,8 @@ pub fn test_lwe_product()
 
 
     let message_modulus = 1u64 << 4;
-    let input_message_1 = 2u64;
-    let input_message_2 = 3u64;
+    let input_message_1 = 3u64;
+    let input_message_2 = 2u64;
 
     let delta = (1_u64 << 63) / message_modulus;
     let plaintext_1 = Plaintext(input_message_1 * delta);
@@ -148,6 +149,8 @@ pub fn lwe_product(lwe_ciphertext_1: LweCiphertext<Vec<u64>>,
                     carry_modulus : CarryModulus) -> LweCiphertext<Vec<u64>>
 {
 
+
+
     let max_value = message_modulus.0 * carry_modulus.0 - 1;
 
 
@@ -161,7 +164,6 @@ pub fn lwe_product(lwe_ciphertext_1: LweCiphertext<Vec<u64>>,
         message_modulus
 
     }; 
-
 
     // Bivariate accumulator
     let acc = sks.generate_accumulator_bivariate(|x, y| x*y );
@@ -184,4 +186,132 @@ pub fn lwe_product(lwe_ciphertext_1: LweCiphertext<Vec<u64>>,
 
     ct_res.ct
 
+}
+
+
+pub fn glev(l: DecompositionLevelCount, 
+    beta: DecompositionBaseLog, 
+    m: u64, 
+    s: GlweSecretKey<Vec<u64>>,
+    glwe_size: GlweSize,
+    polynomial_size: PolynomialSize,
+    glwe_modular_std_dev: StandardDev
+)
+{
+
+    let glev_vector: Vec<GlweCiphertext<Vec<u64>>> = Vec::new();
+
+        // Create the PRNG
+    let mut seeder = new_seeder();
+    let seeder = seeder.as_mut();
+    let mut encryption_generator =
+        EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
+    
+
+    for i in 0..l.0 {
+        let mut glwe_ciphertext = GlweCiphertext::new(0, glwe_size, polynomial_size);
+        let delta = (1_u64 << 63) / ((beta.0 as u64)^(i as u64));
+        let plaintext_list = PlaintextList::new(m*delta, PlaintextCount(polynomial_size.0));
+
+        
+
+
+        encrypt_glwe_ciphertext(&s, 
+            &mut glwe_ciphertext, 
+            &plaintext_list, 
+            glwe_modular_std_dev, 
+            &mut encryption_generator);
+
+
+    }
+}
+
+
+pub fn test_glwe_product()
+{
+
+
+    let glwe_size = GlweSize(2);
+    let polynomial_size = PolynomialSize(1024);
+    let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
+    let l = DecompositionLevelCount(4);
+    let beta = DecompositionBaseLog(12);
+
+    // Create the PRNG
+    let mut seeder = new_seeder();
+    let seeder = seeder.as_mut();
+    let mut encryption_generator =
+        EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
+    let mut secret_generator =
+        SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
+
+    let glwe_secret_key =
+        GlweSecretKey::generate_new_binary(glwe_size.to_glwe_dimension(), polynomial_size, &mut secret_generator);
+
+    // Create the plaintext
+    let msg1 = 3u64;
+    let msg2 = 2u64;
+
+    let encoded_msg1 = msg1 << 60;
+    let encoded_msg2 = msg2 << 60;
+
+    let plaintext_list1 = PlaintextList::new(encoded_msg1, PlaintextCount(polynomial_size.0));
+    let plaintext_list2 = PlaintextList::new(encoded_msg2, PlaintextCount(polynomial_size.0));
+
+    // Create a new GlweCiphertext
+    let mut glwe1 = GlweCiphertext::new(0u64, glwe_size, polynomial_size);
+    let mut glwe2 = GlweCiphertext::new(0u64, glwe_size, polynomial_size);
+
+    encrypt_glwe_ciphertext(
+        &glwe_secret_key,
+        &mut glwe1,
+        &plaintext_list1,
+        glwe_modular_std_dev,
+        &mut encryption_generator,
+    );
+
+    encrypt_glwe_ciphertext(
+        &glwe_secret_key,
+        &mut glwe2,
+        &plaintext_list2,
+        glwe_modular_std_dev,
+        &mut encryption_generator,
+    );
+
+    let s = glwe_secret_key.as_polynomial_list();
+    let s_poly = s.get(0);
+    let mut res_product = Polynomial::new(0u64, polynomial_size);
+
+    polynomial_karatsuba_wrapping_mul(&mut res_product, &s_poly, &s_poly);
+
+    let res_product_vec = res_product.into_container();
+
+    let s_quare = GlweSecretKey::from_container(res_product_vec, polynomial_size);
+
+
+    // println!("{:?}", res_product_vec);
+
+    // glev(l, beta, m, s, glwe_size, polynomial_size, glwe_modular_std_dev)
+
+    // let mut output_plaintext_list = PlaintextList::new(0u64, plaintext_list1.plaintext_count());
+
+    // decrypt_glwe_ciphertext(&glwe_secret_key, &glwe1, &mut output_plaintext_list);
+
+    // // Round and remove encoding
+    // // First create a decomposer working on the high 4 bits corresponding to our encoding.
+    // let decomposer = SignedDecomposer::new(DecompositionBaseLog(4), DecompositionLevelCount(1));
+
+    // output_plaintext_list
+    //     .iter_mut()
+    //     .for_each(|elt| *elt.0 = decomposer.closest_representable(*elt.0));
+
+    // // Get the raw vector
+    // let mut cleartext_list = output_plaintext_list.into_container();
+    // // Remove the encoding
+    // cleartext_list.iter_mut().for_each(|elt| *elt = *elt >> 60);
+    // // Get the list immutably
+    // let cleartext_list = cleartext_list;
+
+    // // Check we recovered the original message for each plaintext we encrypted
+    // cleartext_list.iter().for_each(|&elt| assert_eq!(elt, msg1));
 }

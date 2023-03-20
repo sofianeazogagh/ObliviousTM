@@ -2,6 +2,8 @@ use tfhe::{core_crypto::prelude::*, shortint::server_key::Accumulator};
 use tfhe::shortint::prelude::*;
 use std::time::{Instant, Duration};
 
+
+
 pub fn generate_accumulator<F>(
         polynomial_size: PolynomialSize,
         glwe_size: GlweSize,
@@ -44,6 +46,7 @@ pub fn generate_accumulator<F>(
             allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext);
 
         accumulator
+        
 }
 
 
