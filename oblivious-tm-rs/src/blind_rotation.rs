@@ -5,30 +5,23 @@ use std::time::{Instant};
 
 #[path = "./helpers.rs"] mod helpers;
 
-// pub fn otm_blind_rotation(
-//     mut fourier_bsk: FourierLweBootstrapKey<ABox<[Complex<f64>]>>,
-//     lwe_ciphertext_in: LweCiphertextOwned<u64>,
-//     mut accumulator: GlweCiphertextOwned<u64>
-//
-// )
-// {
-//
-//     blind_rotate_assign(&lwe_ciphertext_in, &mut accumulator, &fourier_bsk);
-//
-// }
-
 
 pub fn test_blind_rotation()
 {
 
     let small_lwe_dimension = LweDimension(742);
     let glwe_dimension = GlweDimension(1);
+    let big_lwe_dimension = LweDimension(2048);
     let polynomial_size = PolynomialSize(2048);
     let lwe_modular_std_dev = StandardDev(0.000007069849454709433);
     let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
     let pbs_base_log = DecompositionBaseLog(23);
     let pbs_level = DecompositionLevelCount(1);
-
+    let ks_level = DecompositionLevelCount(5);
+    let ks_base_log = DecompositionBaseLog(3);
+    let pfks_level = DecompositionLevelCount(1); //2
+    let pfks_base_log = DecompositionBaseLog(23); //15
+    let pfks_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
     // Request the best seeder possible, starting with hardware entropy sources and falling back to
     // /dev/random on Unix systems if enabled via cargo features
     let mut boxed_seeder = new_seeder();
@@ -119,7 +112,6 @@ pub fn test_blind_rotation()
 
     println!("Performing blind rotation...");
     let start = Instant::now();
-    blind_rotate_assign(&lwe_ciphertext_in, &mut accumulator, &fourier_bsk);
     let duration = start.elapsed();
     println!("Duration of blind rotation : {:?}", duration);
 
@@ -149,6 +141,13 @@ pub fn test_blind_rotation()
     println!("Result of blind rotation : {:?}", cleartext_list);
 
 }
+
+// pub fn blind_rotation(context: &mut helpers::FunctionContext)
+// {
+
+//     blind_rotate_assign(context.lwe_ciphertext, context.glwe_ciphertext, );
+
+// }
 
 
 
