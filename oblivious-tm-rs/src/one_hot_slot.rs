@@ -3,13 +3,12 @@ use std::time::Instant;
 
 
 use rayon::prelude::*;
-use std::sync::Mutex;
 use tfhe::core_crypto::prelude::*;
 use tfhe::shortint::ciphertext::Degree;
 use tfhe::shortint::prelude::*;
 use tfhe::shortint::server_key::MaxDegree;
 
-use crate::one_hot_slot::helpers::encrypt_accumulator_as_glwe_ciphertext;
+use crate::one_hot_slot::helpers::{encrypt_accumulator_as_glwe_ciphertext, scalar_greater};
 
 #[path = "./helpers.rs"] mod helpers;
 
@@ -103,8 +102,8 @@ pub fn test_one_hot_slot()
     // round the 5 MSB, 1 bit of padding plus our 4 bits of message
     // let signed_decomposer : SignedDecomposer<u64> =
         // SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
-    let signed_decomposer : SignedDecomposer<u64> =
-        SignedDecomposer::new(DecompositionBaseLog(9), DecompositionLevelCount(1));
+    // let signed_decomposer : SignedDecomposer<u64> =
+        // SignedDecomposer::new(DecompositionBaseLog(9), DecompositionLevelCount(1));
 
     let mut lwe_ksk = LweKeyswitchKey::new(
         0u64,
@@ -139,7 +138,7 @@ pub fn test_one_hot_slot()
     // Our input
 
     let column = 1u64;
-    let input = 3u64;
+    let line = 5u64;
 
 
 
@@ -147,6 +146,14 @@ pub fn test_one_hot_slot()
     let ct_col : LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
         &small_lwe_sk,
         input_columns, 
+        lwe_modular_std_dev,
+        &mut encryption_generator,
+    );
+
+    let input_line = Plaintext(delta*line);
+    let ct_input : LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
+        &big_lwe_sk,
+        input_line, 
         lwe_modular_std_dev,
         &mut encryption_generator,
     );
@@ -175,7 +182,22 @@ pub fn test_one_hot_slot()
         vec![7,6,5,4,3,2,1,0],
     ];
 
-    // let accumulator1_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f1.clone(),);
+
+
+    let root_plaintext = Plaintext(tree[0][0]*delta);
+    let ct_root = 
+                        allocate_and_trivially_encrypt_new_lwe_ciphertext(
+                            big_lwe_dimension.to_lwe_size(), root_plaintext);
+
+    
+
+    let ct_one = allocate_and_trivially_encrypt_new_lwe_ciphertext(big_lwe_dimension.to_lwe_size(), Plaintext(delta));
+
+    let mut not_ct_cp = LweCiphertext::new(0_64,big_lwe_dimension.to_lwe_size());
+
+    
+    // Multi PBS 
+
 
     let mut accumulators: Vec<GlweCiphertextOwned<u64>> = Vec::new();
     for f in array2d{
@@ -191,6 +213,8 @@ pub fn test_one_hot_slot()
         accumulators.push(accumulator);
     }
 
+   
+    let start_ohs = Instant::now();
     let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
     pbs_results.par_extend( accumulators
     .into_par_iter()
@@ -206,52 +230,16 @@ pub fn test_one_hot_slot()
         }),
     );
 
-
-
-
-
-    let mut tree_lwe : Vec<Vec<LweCiphertext<Vec<u64>>>> = Vec::new();
-    for stage in tree.clone(){
-        let mut stage_lwe : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-        for element in stage{
-            let element_encoded = Plaintext(element*delta);
-            let ct_element = 
-                        allocate_and_trivially_encrypt_new_lwe_ciphertext(
-                            big_lwe_dimension.to_lwe_size(), element_encoded);
-            stage_lwe.push(ct_element);
-        }
-        tree_lwe.push(stage_lwe);
-    }
-
-
-
-    let input_plaintext = Plaintext(delta*input);
-    let ct_input : LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
-        &big_lwe_sk,
-        input_plaintext, 
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    let ct_one = allocate_and_trivially_encrypt_new_lwe_ciphertext(big_lwe_dimension.to_lwe_size(), Plaintext(delta));
-
-    let mut not_ct_cp = LweCiphertext::new(0_64,big_lwe_dimension.to_lwe_size());
-
-
     ///////////////////////    First Stage  /////////////////////////////////
 
 
-
+    // Scalar CMP
     let ct_cp = greater_or_equal_via_shortint(ct_input.clone(), 
-        tree_lwe[0][0].clone(), 
+        ct_root, 
         message_modulus, 
         carry_modulus, 
         &sks);
     lwe_ciphertext_sub(&mut not_ct_cp,&ct_one, &ct_cp);
-
-
-
-
 
 
     // Blind Node Selection
@@ -259,7 +247,7 @@ pub fn test_one_hot_slot()
 
 
     
-    // ------ABS
+    // ------ABS (par_version)
     let stage_lwe = ct_childs_acc.par_iter().zip(tree[1].par_iter())
     .map(|(ct_child_acc, elmt)| {
         let mut res_abs = ct_child_acc.clone();
@@ -274,6 +262,7 @@ pub fn test_one_hot_slot()
     }
 
 
+    ///////////////////////    Second Stage  /////////////////////////////////
     // CMP
     let ct_cp = greater_or_equal_via_shortint(ct_input.clone(), 
         ct_res_stage.clone(), 
@@ -282,40 +271,9 @@ pub fn test_one_hot_slot()
         &sks);
     lwe_ciphertext_sub(&mut not_ct_cp, &ct_one, &ct_cp);
 
-            
 
-    // let ct_parents_acc = ct_childs_acc ;
-    // let mut ct_childs_acc : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-
-    // for acc in ct_parents_acc{
-
-    //     let new_acc_left =
-        
-    //     lwe_product_via_shortint(
-    //         acc.clone(), 
-    //         not_ct_cp.clone(), 
-    //         message_modulus, 
-    //         carry_modulus,
-    //         &sks);
-
-    //     ct_childs_acc.push(new_acc_left);
-
-    //     let new_acc_right =
-    //     lwe_product_via_shortint(
-    //         acc.clone(), 
-    //         ct_cp.clone(),
-    //         message_modulus, 
-    //         carry_modulus,
-    //         &sks);
-
-    //     ct_childs_acc.push(new_acc_right);
-    // }
-
-
-
-    // Acc aggregation
+    // Acc aggregation (par_version)
     let ct_parents_acc = ct_childs_acc ;
-    let ct_childs_acc : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 
     let ct_childs_acc: Vec<_> = ct_parents_acc
     .par_iter()
@@ -341,9 +299,7 @@ pub fn test_one_hot_slot()
 
     // BNS 
 
-    // Abs
-
-
+    //------ABS (par_version)
     let stage_lwe = ct_childs_acc.par_iter().zip(tree[2].par_iter())
     .map(|(ct_child_acc, elmt)| {
         let mut res_abs = ct_child_acc.clone();
@@ -351,14 +307,14 @@ pub fn test_one_hot_slot()
         res_abs
     }).collect::<Vec<_>>();
 
-    // Sum
+    //------Sum
     let mut ct_res_stage = stage_lwe[0].clone();
     for i in 1..stage_lwe.len(){
         lwe_ciphertext_add_assign(&mut ct_res_stage, &stage_lwe[i]);
     }
 
 
-
+    ///////////////////////    Last Stage  /////////////////////////////////
     // CMP
     let ct_cp = greater_or_equal_via_shortint(ct_input.clone(), 
         ct_res_stage.clone(), 
@@ -370,10 +326,9 @@ pub fn test_one_hot_slot()
 
 
 
-    // Acc aggregation
+    // Acc aggregation (par_version)
 
     let ct_parents_acc = ct_childs_acc ;
-    let ct_childs_acc : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 
     let ct_childs_acc: Vec<_> = ct_parents_acc
     .par_iter()
@@ -398,44 +353,34 @@ pub fn test_one_hot_slot()
 
 
 
+    // BNS (last one will select the correct LWE Ciphertext)
 
-
-
-    // the last blind node selection
-
-    let mut stage_lwe : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-
-            // mult in place
-    for (i,elmt) in pbs_results.iter().enumerate(){
+    //------Multiplication (par_version)
+    let stage_lwe = pbs_results.par_iter().enumerate()
+    .map(|(i, elmt)| {
         let res = ct_childs_acc[i].clone();
-
         let res = lwe_product_via_shortint(
             res.clone(), 
             elmt.clone(), 
             message_modulus, 
             carry_modulus,
             &sks);
-        stage_lwe.push(res);
-    }
-            // Sum
+        res
+    }).collect::<Vec<_>>();
+
+    //------Sum
     let mut ct_res_stage = stage_lwe[0].clone();
     for i in 1..stage_lwe.len(){
         lwe_ciphertext_add_assign(&mut ct_res_stage, &stage_lwe[i]);
     }
 
+    let duration_ohs = start_ohs.elapsed();
+    println!("Time for OHS {:?}",duration_ohs);
+
 
     
 
     // Decrypt the result
-
-
-    // let ohs_plaintext_final: Plaintext<u64> =
-    //             decrypt_lwe_ciphertext(&big_lwe_sk, &ct_res_stage);
-
-    // let ohs_result_final: u64 =
-    //                         signed_decomposer.closest_representable(ohs_plaintext_final.0) / delta;
-    // println!("{}",ohs_result_final);
-
     
     let res = decrypt(&big_lwe_sk, ct_res_stage, message_modulus, carry_modulus);
 
