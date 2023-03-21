@@ -1,7 +1,5 @@
-use std::time::Instant;
 use tfhe::core_crypto::prelude::*;
 use tfhe::shortint::prelude::*;
-use tfhe::core_crypto::algorithms::polynomial_algorithms::*;
 
 
 pub fn lwe_product(lwe_ciphertext_1: LweCiphertext<Vec<u64>>, 
