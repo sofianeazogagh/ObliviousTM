@@ -6,9 +6,12 @@
 // mod optim_multi_pbs;
 // use crate::optim_multi_pbs::test_multi_pbs;
 
-mod test_glwe;
+// mod test_glwe;
 // use crate::test_glwe::test_add2;
-use crate::test_glwe::test_add;
+// use crate::test_glwe::test_add;
+
+mod one_hot_slot;
+use crate::one_hot_slot::test_one_hot_slot;
 
 
 
@@ -20,7 +23,9 @@ pub fn main() {
 
     // test_multi_pbs();
 
-    test_add();
+    // test_add(); // from test_glwe
+
+    test_one_hot_slot(); // from one_hot_slot
 
 
 }

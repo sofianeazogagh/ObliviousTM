@@ -255,20 +255,7 @@ pub fn bacc2d(
 ) -> LweCiphertext<Vec<u64>>
 where
  {
-    // let mut pbs_results:Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    // for acc in accumulators{
-    //     let mut pbs_ct =
-    //     LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
-    //     programmable_bootstrap_lwe_ciphertext(
-    //         &lwe_ciphertext_1,
-    //         &mut pbs_ct,
-    //         &acc,
-    //         &fourier_bsk,);
-    //     let mut switched = LweCiphertext::new(0, small_lwe_dimension.to_lwe_size());
-    //     keyswitch_lwe_ciphertext(&lwe_ksk, &mut pbs_ct, &mut switched);
-    //     pbs_results.push(switched);
-
-    // }
+    
     let start_multi_pbs = Instant::now();
     let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 pbs_results.par_extend(
