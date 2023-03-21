@@ -4,240 +4,243 @@ use rayon::prelude::*;
 
 use num_complex::Complex;
 use tfhe::core_crypto::prelude::*;
-use aligned_vec::{ABox};
+use aligned_vec::ABox;
 
 
-pub fn blind_array_access2d() {
-    // DISCLAIMER: these toy example parameters are not guaranteed to be secure or yield correct
-    // computations
-    // Define the parameters for a 4 bits message able to hold the doubled 2 bits message
+#[cfg(test)]
+mod tests{
 
-    let small_lwe_dimension = LweDimension(742);
-    let glwe_dimension = GlweDimension(1);
-    let big_lwe_dimension = LweDimension(2048);
-    let polynomial_size = PolynomialSize(2048);
-    let lwe_modular_std_dev = StandardDev(0.000007069849454709433);
-    let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
-    let pbs_base_log = DecompositionBaseLog(23);
-    let pbs_level = DecompositionLevelCount(1);
-    let ks_base_log = DecompositionBaseLog(3);
-    let ks_level = DecompositionLevelCount(5);
-    let pfks_base_log = DecompositionBaseLog(23); //15
-    let pfks_level = DecompositionLevelCount(1); //2
-    let pfks_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
+    use tfhe::core_crypto::prelude::*;
+    use crate::helpers;
+    use crate::unitest_baacc2d::*;
 
-    // Request the best seeder possible, starting with hardware entropy sources and falling back to
-    // /dev/random on Unix systems if enabled via cargo features
-    let mut boxed_seeder = new_seeder();
-    // Get a mutable reference to the seeder as a trait object from the Box returned by new_seeder
-    let seeder = boxed_seeder.as_mut();
-
-    // Create a generator which uses a CSPRNG to generate secret keys
-    let mut secret_generator =
-        SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
-
-    // Create a generator which uses two CSPRNGs to generate public masks and secret encryption
-    // noise
-    let mut encryption_generator =
-        EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
-
-    println!("Generating keys...");
-
-    // Generate an LweSecretKey with binary coefficients
-    let small_lwe_sk =
-        LweSecretKey::generate_new_binary(small_lwe_dimension, &mut secret_generator);
-
-    // Generate a GlweSecretKey with binary coefficients
-    let glwe_sk =
-        GlweSecretKey::generate_new_binary(glwe_dimension, polynomial_size, &mut secret_generator);
-
-    // Create a copy of the GlweSecretKey re-interpreted as an LweSecretKey
-    let big_lwe_sk = glwe_sk.clone().into_lwe_secret_key();
-
-    // Generate the bootstrapping key, we use the parallel variant for performance reason
-    let std_bootstrapping_key = par_allocate_and_generate_new_lwe_bootstrap_key(
-        &small_lwe_sk,
-        &glwe_sk,
-        pbs_base_log,
-        pbs_level,
-        glwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    // Create the empty bootstrapping key in the Fourier domain
-    let mut fourier_bsk = FourierLweBootstrapKey::new(
-        std_bootstrapping_key.input_lwe_dimension(),
-        std_bootstrapping_key.glwe_size(),
-        std_bootstrapping_key.polynomial_size(),
-        std_bootstrapping_key.decomposition_base_log(),
-        std_bootstrapping_key.decomposition_level_count(),
-    );
-
-    // Use the conversion function (a memory optimized version also exists but is more complicated
-    // to use) to convert the standard bootstrapping key to the Fourier domain
-    convert_standard_lwe_bootstrap_key_to_fourier(&std_bootstrapping_key, &mut fourier_bsk);
-    // We don't need the standard bootstrapping key anymore
-    drop(std_bootstrapping_key);
+    #[test]
+    pub fn blind_array_access2d() {
 
 
-    let mut lwe_ksk = LweKeyswitchKey::new(
-        0u64,
-        ks_base_log,
-        ks_level,
-        big_lwe_dimension,
-        small_lwe_dimension,
-    );
-    generate_lwe_keyswitch_key(
-        &big_lwe_sk,
-        &small_lwe_sk,
-        &mut lwe_ksk,
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    // Create Packing Key Switch
-
-    let mut pfpksk = LwePrivateFunctionalPackingKeyswitchKey::new(
-        0,
-        pfks_base_log,
-        pfks_level,
-        small_lwe_dimension,
-        glwe_dimension.to_glwe_size(),
-        polynomial_size,
-    );
-    // Here there is some freedom for the choice of the last polynomial from algorithm 2
-    // By convention from the paper the polynomial we use here is the constant -1
-    let mut last_polynomial = Polynomial::new(0, polynomial_size);
-    // Set the constant term to u64::MAX == -1i64
-    last_polynomial[0] = u64::MAX;
-    // Generate the LWE private functional packing keyswitch key
-    par_generate_lwe_private_functional_packing_keyswitch_key(
-        &small_lwe_sk,
-        &glwe_sk,
-        &mut pfpksk,
-        pfks_modular_std_dev,
-        &mut encryption_generator,
-        |x| x,
-        &last_polynomial,
-    );
-
-
-    // Our 4 bits message space
-    let message_modulus = 1u64 << 4;
-
-    // Our input message
-    let column = 4u64;
-    let line = 4;
-
-    // let input_message_final = 16u64 + line;
-
-    let input_message_final = 16u64 + line;
-
-
-    // Delta used to encode 4 bits of message + a bit of padding on u64
-    let delta = (1_u64 << 63) / message_modulus;
-
-    // Apply our encoding
-    let plaintext_1 = Plaintext(column * delta);
-    let plaintext_final = Plaintext(input_message_final*delta);
-
-    // Allocate a new LweCiphertext and encrypt our plaintext
-    let lwe_ciphertext_1: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
-        &small_lwe_sk,
-        plaintext_1,
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-    let lwe_ciphertext_final: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
-        &small_lwe_sk,
-        plaintext_final,
-        lwe_modular_std_dev,
-        &mut encryption_generator,
-    );
-
-
-
-
-
-    // Create a SignedDecomposer to perform the rounding of the decrypted plaintext
-    // We pass a DecompositionBaseLog of 5 and a DecompositionLevelCount of 1 indicating we want to
-    // round the 5 MSB, 1 bit of padding plus our 4 bits of message
-    let signed_decomposer =
-        SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
-
-
-    // let mut array2d: Vec<Vec<u64>> = Vec::new();
-    // for i in 0..message_modulus-1{
-    //     let mut f1 = vec![0_u64;message_modulus as usize];
-    //     for (j,f1) in f1.iter_mut().enumerate(){ *f1 = i*j as u64} // f = [0,..,message_modulus]
-    //     array2d.push(f1.clone());
-    // }
-
-    let array2d = vec![
-        vec![0,1,2,3,0,1,2,3],
-        vec![4,5,6,7,4,5,6,7],
-        vec![8,9,10,11,8,9,10,11],
-        vec![12,13,14,15,12,13,14,15],
-        vec![0,1,2,3,0,1,2,3],
-        vec![4,5,6,7,4,5,6,7],
-        vec![8,9,10,11,8,9,10,11],
-        vec![12,13,14,15,12,13,14,15]
-    ];
-
-    // let array2d = vec![
-    //     vec![0,1],
-    //     vec![4,5],
-    // ];
-
-    // let accumulator1_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f1.clone(),);
-
-    let mut accumulators: Vec<GlweCiphertextOwned<u64>> = Vec::new();
-    for f in array2d.clone(){
-        let accumulator_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f.clone(),);
-        // Generate the accumulator for our multiplication by 2 using a simple closure
-        let accumulator: GlweCiphertextOwned<u64> = encrypt_accumulator_as_glwe_ciphertext(
+        let small_lwe_dimension = LweDimension(742);
+        let glwe_dimension = GlweDimension(1);
+        let big_lwe_dimension = LweDimension(2048);
+        let polynomial_size = PolynomialSize(2048);
+        let lwe_modular_std_dev = StandardDev(0.000007069849454709433);
+        let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
+        let pbs_base_log = DecompositionBaseLog(23);
+        let pbs_level = DecompositionLevelCount(1);
+        let ks_base_log = DecompositionBaseLog(3);
+        let ks_level = DecompositionLevelCount(5);
+        let pfks_base_log = DecompositionBaseLog(23); //15
+        let pfks_level = DecompositionLevelCount(1); //2
+        let pfks_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
+    
+        // Request the best seeder possible, starting with hardware entropy sources and falling back to
+        // /dev/random on Unix systems if enabled via cargo features
+        let mut boxed_seeder = new_seeder();
+        // Get a mutable reference to the seeder as a trait object from the Box returned by new_seeder
+        let seeder = boxed_seeder.as_mut();
+    
+        // Create a generator which uses a CSPRNG to generate secret keys
+        let mut secret_generator =
+            SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
+    
+        // Create a generator which uses two CSPRNGs to generate public masks and secret encryption
+        // noise
+        let mut encryption_generator =
+            EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
+    
+        println!("Generating keys...");
+    
+        // Generate an LweSecretKey with binary coefficients
+        let small_lwe_sk =
+            LweSecretKey::generate_new_binary(small_lwe_dimension, &mut secret_generator);
+    
+        // Generate a GlweSecretKey with binary coefficients
+        let glwe_sk =
+            GlweSecretKey::generate_new_binary(glwe_dimension, polynomial_size, &mut secret_generator);
+    
+        // Create a copy of the GlweSecretKey re-interpreted as an LweSecretKey
+        let big_lwe_sk = glwe_sk.clone().into_lwe_secret_key();
+    
+        // Generate the bootstrapping key, we use the parallel variant for performance reason
+        let std_bootstrapping_key = par_allocate_and_generate_new_lwe_bootstrap_key(
+            &small_lwe_sk,
             &glwe_sk,
+            pbs_base_log,
+            pbs_level,
             glwe_modular_std_dev,
             &mut encryption_generator,
-            polynomial_size,
+        );
+    
+        // Create the empty bootstrapping key in the Fourier domain
+        let mut fourier_bsk = FourierLweBootstrapKey::new(
+            std_bootstrapping_key.input_lwe_dimension(),
+            std_bootstrapping_key.glwe_size(),
+            std_bootstrapping_key.polynomial_size(),
+            std_bootstrapping_key.decomposition_base_log(),
+            std_bootstrapping_key.decomposition_level_count(),
+        );
+    
+        // Use the conversion function (a memory optimized version also exists but is more complicated
+        // to use) to convert the standard bootstrapping key to the Fourier domain
+        convert_standard_lwe_bootstrap_key_to_fourier(&std_bootstrapping_key, &mut fourier_bsk);
+        // We don't need the standard bootstrapping key anymore
+        drop(std_bootstrapping_key);
+    
+    
+        let mut lwe_ksk = LweKeyswitchKey::new(
+            0u64,
+            ks_base_log,
+            ks_level,
+            big_lwe_dimension,
+            small_lwe_dimension,
+        );
+        generate_lwe_keyswitch_key(
+            &big_lwe_sk,
+            &small_lwe_sk,
+            &mut lwe_ksk,
+            lwe_modular_std_dev,
+            &mut encryption_generator,
+        );
+    
+        // Create Packing Key Switch
+    
+        let mut pfpksk = LwePrivateFunctionalPackingKeyswitchKey::new(
+            0,
+            pfks_base_log,
+            pfks_level,
+            small_lwe_dimension,
             glwe_dimension.to_glwe_size(),
-            accumulator_u64);
-        accumulators.push(accumulator);
+            polynomial_size,
+        );
+        // Here there is some freedom for the choice of the last polynomial from algorithm 2
+        // By convention from the paper the polynomial we use here is the constant -1
+        let mut last_polynomial = Polynomial::new(0, polynomial_size);
+        // Set the constant term to u64::MAX == -1i64
+        last_polynomial[0] = u64::MAX;
+        // Generate the LWE private functional packing keyswitch key
+        par_generate_lwe_private_functional_packing_keyswitch_key(
+            &small_lwe_sk,
+            &glwe_sk,
+            &mut pfpksk,
+            pfks_modular_std_dev,
+            &mut encryption_generator,
+            |x| x,
+            &last_polynomial,
+        );
+    
+    
+        // Our 4 bits message space
+        let message_modulus = 1u64 << 4;
+    
+        // Our input message
+        let column = 4u64;
+        let line = 4u64;
+    
+        // let input_message_final = 16u64 + line;
+    
+        let input_message_final = 16u64 + line;
+    
+    
+        // Delta used to encode 4 bits of message + a bit of padding on u64
+        let delta = (1_u64 << 63) / message_modulus;
+    
+        // Apply our encoding
+        let plaintext_1 = Plaintext(column * delta);
+        let plaintext_final = Plaintext(input_message_final*delta);
+    
+        // Allocate a new LweCiphertext and encrypt our plaintext
+        let lwe_ciphertext_1: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
+            &small_lwe_sk,
+            plaintext_1,
+            lwe_modular_std_dev,
+            &mut encryption_generator,
+        );
+    
+        let lwe_ciphertext_final: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
+            &small_lwe_sk,
+            plaintext_final,
+            lwe_modular_std_dev,
+            &mut encryption_generator,
+        );
+    
+    
+        // Create a SignedDecomposer to perform the rounding of the decrypted plaintext
+        // We pass a DecompositionBaseLog of 5 and a DecompositionLevelCount of 1 indicating we want to
+        // round the 5 MSB, 1 bit of padding plus our 4 bits of message
+        let signed_decomposer =
+            SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
+    
+    
+        // let mut array2d: Vec<Vec<u64>> = Vec::new();
+        // for i in 0..message_modulus-1{
+        //     let mut f1 = vec![0_u64;message_modulus as usize];
+        //     for (j,f1) in f1.iter_mut().enumerate(){ *f1 = i*j as u64} // f = [0,..,message_modulus]
+        //     array2d.push(f1.clone());
+        // }
+    
+        let array2d = vec![
+            vec![0,1,2,3,0,1,2,3],
+            vec![4,5,6,7,4,5,6,7],
+            vec![8,9,10,11,8,9,10,11],
+            vec![12,13,14,15,12,13,14,15],
+            vec![0,1,2,3,0,1,2,3],
+            vec![4,5,6,7,4,5,6,7],
+            vec![8,9,10,11,8,9,10,11],
+            vec![12,13,14,15,12,13,14,15]
+        ];
+    
+        // let array2d = vec![
+        //     vec![0,1],
+        //     vec![4,5],
+        // ];
+    
+        // let accumulator1_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f1.clone(),);
+    
+        let mut accumulators: Vec<GlweCiphertextOwned<u64>> = Vec::new();
+        for f in array2d.clone(){
+            let accumulator_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f.clone(),);
+            // Generate the accumulator for our multiplication by 2 using a simple closure
+            let accumulator: GlweCiphertextOwned<u64> = encrypt_accumulator_as_glwe_ciphertext(
+                &glwe_sk,
+                glwe_modular_std_dev,
+                &mut encryption_generator,
+                polynomial_size,
+                glwe_dimension.to_glwe_size(),
+                accumulator_u64);
+            accumulators.push(accumulator);
+        }
+    
+    
+        let ct_res = bacc2d(
+            accumulators, 
+            big_lwe_dimension, 
+            lwe_ciphertext_1, 
+            fourier_bsk, 
+            small_lwe_dimension, 
+            lwe_ksk, 
+            polynomial_size, 
+            message_modulus, 
+            delta, 
+            glwe_dimension, 
+            pfpksk, 
+            lwe_ciphertext_final);
+                
+        // Decrypt the PBS multiplication result
+        let pbs_plaintext_final: Plaintext<u64> =
+            decrypt_lwe_ciphertext(&big_lwe_sk, &ct_res);
+    
+        let pbs_result_final: u64 =
+            signed_decomposer.closest_representable(pbs_plaintext_final.0) / delta;
+    
+        println!("Checking result of BACC2D input ({line},{column})");
+        let expected_value = array2d[line as usize][column as usize];
+        assert_eq!(expected_value, pbs_result_final);
+        println!("Success ! Expected {expected_value}, got {pbs_result_final}");
+    
     }
-
-
-    let start_bacc2d = Instant::now();
-
-    let ct_res = bacc2d(
-        accumulators, 
-        big_lwe_dimension, 
-        lwe_ciphertext_1, 
-        fourier_bsk, 
-        small_lwe_dimension, 
-        lwe_ksk, 
-        polynomial_size, 
-        message_modulus, 
-        delta, 
-        glwe_dimension, 
-        pfpksk, 
-        lwe_ciphertext_final);
-    
-    let duration_bacc2d = start_bacc2d.elapsed();
-    println!("Temps BACC2D = {:?}",duration_bacc2d);
-    
-    // Decrypt the PBS multiplication result
-    let pbs_plaintext_final: Plaintext<u64> =
-        decrypt_lwe_ciphertext(&big_lwe_sk, &ct_res);
-
-    let pbs_result_final: u64 =
-        signed_decomposer.closest_representable(pbs_plaintext_final.0) / delta;
-
-    println!("Checking result...");
-    println!("BACC2D input ({line},{column}) got {pbs_result_final}");
-
-
 }
+
+
+
 
 pub fn bacc2d(
     accumulators: Vec<GlweCiphertext<Vec<u64>>>, 
@@ -445,4 +448,3 @@ fn encrypt_accumulator_as_glwe_ciphertext(
     );
     accumulator
 }
-
