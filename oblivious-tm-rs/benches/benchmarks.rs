@@ -255,7 +255,7 @@ fn bench_blind_array_access2d(c: &mut Criterion) {
     }
 
     let mut group = c.benchmark_group("sample-size-example");
-    group.significance_level(0.1).sample_size(10);
+    group.sample_size(20);
     group.bench_function("BACC2D", |b| b.iter(||  bacc2d(
         accumulators.clone(), 
         big_lwe_dimension, 
