@@ -62,14 +62,13 @@ pub fn lwe_product(lwe_ciphertext_1: LweCiphertext<Vec<u64>>,
 mod tests
 {
     use tfhe::core_crypto::prelude::*;
-    use tfhe::shortint::prelude::*;
+    use tfhe::shortint::parameters::*;
+    use crate::ciphertext_operations::lwe_product;
 
-    use crate::ciphertext_operations::*;
 
     #[test]
     pub fn test_lwe_product()
     {
-
         let small_lwe_dimension = LweDimension(742);
         let glwe_dimension = GlweDimension(1);
         let big_lwe_dimension = LweDimension(2048);
@@ -349,9 +348,9 @@ pub fn test_glwe_product()
 
     println!("{:?}", s_quare_poly);
 
-    let glev = create_glev(l, 
-        beta, 
-        m, s, glwe_size, polynomial_size, glwe_modular_std_dev, ciphertext_modulus)
+    // let glev = create_glev(l,
+    //     beta,
+    //     m, s, glwe_size, polynomial_size, glwe_modular_std_dev, ciphertext_modulus);
 
     // let duration = start.elapsed();
     // println!("b_prime =  : {:?}", b_prime);
