@@ -247,6 +247,7 @@ dependencies = [
  "aligned-vec",
  "arrayvec",
  "num-complex",
+ "rayon",
  "tfhe",
 ]
 

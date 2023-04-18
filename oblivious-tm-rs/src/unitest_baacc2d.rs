@@ -1,3 +1,7 @@
+use std::time::Instant;
+
+use rayon::prelude::*;
+
 use num_complex::Complex;
 use tfhe::core_crypto::prelude::*;
 use aligned_vec::{ABox};
@@ -122,8 +126,8 @@ pub fn blind_array_access2d() {
     let message_modulus = 1u64 << 4;
 
     // Our input message
-    let column = 1u64;
-    let line = 2;
+    let column = 4u64;
+    let line = 4;
 
     // let input_message_final = 16u64 + line;
 
@@ -171,11 +175,20 @@ pub fn blind_array_access2d() {
     // }
 
     let array2d = vec![
-        vec![0,1,2,3],
-        vec![4,5,6,7],
-        vec![8,9,10,11],
-        vec![12,13,14,15]
+        vec![0,1,2,3,0,1,2,3],
+        vec![4,5,6,7,4,5,6,7],
+        vec![8,9,10,11,8,9,10,11],
+        vec![12,13,14,15,12,13,14,15],
+        vec![0,1,2,3,0,1,2,3],
+        vec![4,5,6,7,4,5,6,7],
+        vec![8,9,10,11,8,9,10,11],
+        vec![12,13,14,15,12,13,14,15]
     ];
+
+    // let array2d = vec![
+    //     vec![0,1],
+    //     vec![4,5],
+    // ];
 
     // let accumulator1_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f1.clone(),);
 
@@ -193,46 +206,9 @@ pub fn blind_array_access2d() {
         accumulators.push(accumulator);
     }
 
-        // let mut pbs_results:Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 
-        // for acc in accumulators{
-        //     let mut pbs_ct =
-        //     LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
-        //     programmable_bootstrap_lwe_ciphertext(
-        //         &lwe_ciphertext_1,
-        //         &mut pbs_ct,
-        //         &acc,
-        //         &fourier_bsk,);
-        //     pbs_results.push(pbs_ct.clone());
-    
-        // }
-    
-        // ////////////////////KEY SWITCHING////////////////////////
-        
-       
-        // let many_lwe= key_switch(
-        //     pbs_results.clone(), 
-        //     small_lwe_dimension, 
-        //     lwe_ksk);
-    
-        // //////////////////// LWE CIPHERTEXT PACKING////////////////////////
-        // /*
-        // Create a list of LWE ciphertext which will be converted into a GLWE ciphertext
-        // */
-        // let accumulator_final = many_lwe_to_glwe(
-        //     polynomial_size, 
-        //     small_lwe_dimension, 
-        //     message_modulus, 
-        //     many_lwe.clone(), 
-        //     delta, 
-        //     glwe_dimension, 
-        //     pfpksk);
-    
-        // //////////////////// FINAL PBS ////////////////////////
-        // let mut ct_res = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
-        // programmable_bootstrap_lwe_ciphertext(&lwe_ciphertext_final, &mut ct_res, &accumulator_final, &fourier_bsk,);
+    let start_bacc2d = Instant::now();
 
-    
     let ct_res = bacc2d(
         accumulators, 
         big_lwe_dimension, 
@@ -246,6 +222,9 @@ pub fn blind_array_access2d() {
         glwe_dimension, 
         pfpksk, 
         lwe_ciphertext_final);
+    
+    let duration_bacc2d = start_bacc2d.elapsed();
+    println!("Temps BACC2D = {:?}",duration_bacc2d);
     
     // Decrypt the PBS multiplication result
     let pbs_plaintext_final: Plaintext<u64> =
@@ -276,42 +255,57 @@ pub fn bacc2d(
 ) -> LweCiphertext<Vec<u64>>
 where
  {
-    let mut pbs_results:Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    // let mut pbs_results:Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    // for acc in accumulators{
+    //     let mut pbs_ct =
+    //     LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+    //     programmable_bootstrap_lwe_ciphertext(
+    //         &lwe_ciphertext_1,
+    //         &mut pbs_ct,
+    //         &acc,
+    //         &fourier_bsk,);
+    //     let mut switched = LweCiphertext::new(0, small_lwe_dimension.to_lwe_size());
+    //     keyswitch_lwe_ciphertext(&lwe_ksk, &mut pbs_ct, &mut switched);
+    //     pbs_results.push(switched);
 
-
-
-    for acc in accumulators{
-        let mut pbs_ct =
-        LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
-        programmable_bootstrap_lwe_ciphertext(
-            &lwe_ciphertext_1,
-            &mut pbs_ct,
-            &acc,
-            &fourier_bsk,);
-        pbs_results.push(pbs_ct.clone());
-
-    }
-
-    ////////////////////KEY SWITCHING////////////////////////
+    // }
+    let start_multi_pbs = Instant::now();
+    let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+pbs_results.par_extend(
+    accumulators
+        .into_par_iter()
+        .map(|acc| {
+            let mut pbs_ct = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+            programmable_bootstrap_lwe_ciphertext(
+                &lwe_ciphertext_1,
+                &mut pbs_ct,
+                &acc,
+                &fourier_bsk,
+            );
+            let mut switched = LweCiphertext::new(0, small_lwe_dimension.to_lwe_size());
+            keyswitch_lwe_ciphertext(&lwe_ksk, &mut pbs_ct, &mut switched);
+            switched
+        }),
+    );
     
-   
-    let many_lwe= key_switch(
-        pbs_results.clone(), 
-        small_lwe_dimension, 
-        lwe_ksk);
-
+    let duration_multi_pbs = start_multi_pbs.elapsed();
+    println!("Temps multi pbs + key switch : {:?}",duration_multi_pbs);
     //////////////////// LWE CIPHERTEXT PACKING////////////////////////
     /*
     Create a list of LWE ciphertext which will be converted into a GLWE ciphertext
     */
+
+    let start_packing = Instant::now();
     let accumulator_final = many_lwe_to_glwe(
         polynomial_size, 
         small_lwe_dimension, 
         message_modulus, 
-        many_lwe.clone(), 
+        pbs_results, 
         delta, 
         glwe_dimension, 
         pfpksk);
+    let duration_packing = start_packing.elapsed();
+    println!(" Temps Packing : {:?}",duration_packing);
 
     //////////////////// FINAL PBS ////////////////////////
     let mut ct_res = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
@@ -319,25 +313,6 @@ where
     ct_res
 }
 
-
-
-
-fn key_switch(
-    many_lwe_wo_ks: Vec<LweCiphertext<Vec<u64>>>, 
-    small_lwe_dimension: LweDimension, 
-    lwe_ksk: LweKeyswitchKey<Vec<u64>>
-)
--> Vec<LweCiphertext<Vec<u64>>>
-{
-    let mut many_lwe= Vec::new();
-    for ct in many_lwe_wo_ks {
-        let mut switched = LweCiphertext::new(0, small_lwe_dimension.to_lwe_size());
-        keyswitch_lwe_ciphertext(&lwe_ksk, &ct, &mut switched);
-        many_lwe.push(switched);
-    }
-
-    return many_lwe;
-}
 
 fn many_lwe_to_glwe(
     polynomial_size: PolynomialSize, 
