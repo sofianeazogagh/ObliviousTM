@@ -351,7 +351,7 @@ pub fn test_glwe_product()
 
     let glev = create_glev(l, 
         beta, 
-        m, s, glwe_size, polynomial_size, glwe_modular_std_dev, ciphertext_modulus)
+        m, s, glwe_size, polynomial_size, glwe_modular_std_dev, ciphertext_modulus);
 
     // let duration = start.elapsed();
     // println!("b_prime =  : {:?}", b_prime);
