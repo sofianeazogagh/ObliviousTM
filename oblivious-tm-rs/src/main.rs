@@ -1,4 +1,5 @@
-
+#![allow(dead_code)]
+#![allow(unused_variables)]
 
 mod unitest_baacc2d;
 use crate::unitest_baacc2d::blind_array_access2d;
@@ -15,8 +16,8 @@ use crate::unitest_baacc2d::blind_array_access2d;
 // use crate::one_hot_slot::test_one_hot_slot;
 
 
-// mod private_computing;
-// use crate::private_computing::*;
+mod blind_permutation;
+use crate::blind_permutation::blind_permutation;
 
 // mod gist;
 // use crate::gist::*;
@@ -32,6 +33,8 @@ mod headers;
 pub fn main() {
 
     // blind_array_access2d(); // from unitest_bacc2d
+
+    blind_permutation(); // from blind_permutation
 
     // test_multi_pbs();
 

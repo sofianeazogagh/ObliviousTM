@@ -1,11 +1,10 @@
 use aligned_vec::ABox;
 use num_complex::Complex;
-use tfhe::boolean::public_key;
+use tfhe::boolean::{public_key, server_key};
 use tfhe::{core_crypto::prelude::*};
 use tfhe::shortint::{prelude::*, parameters};
 
 
-// #[derive(Debug,Clone)]
 
 pub struct Context{
     parameters : Parameters,
@@ -69,6 +68,7 @@ impl Context {
     pub fn carry_modulus(&self) -> CarryModulus {self.parameters.carry_modulus}
     pub fn delta(&self) -> u64 {self.delta}
     pub fn full_message_modulus(&self) -> usize {self.full_message_modulus}
+    // pub fn signed_decomposer(&self) -> SignedDecomposer<u64> {self.signed_decomposer}
 
 
 
@@ -277,6 +277,15 @@ impl PrivateKey{
         
     }
 
+    pub fn debug_lwe(&self, string : &str, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &mut Context){
+        // Decrypt the PBS multiplication result
+        let plaintext: Plaintext<u64> =
+        decrypt_lwe_ciphertext(&self.small_lwe_sk, &ciphertext);
+        let result: u64 =
+        ctx.signed_decomposer.closest_representable(plaintext.0) / ctx.delta();
+        println!("{} {}",string,result);
+    }
+
 
 
 
@@ -310,7 +319,14 @@ impl PublicKey{
 pub struct LUT(pub(crate) GlweCiphertext<Vec<u64>>);
 
 
+
 impl LUT {
+
+
+    pub fn new(ctx : &Context) -> LUT{
+        let new_lut = GlweCiphertext::new(0_64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size());
+        LUT(new_lut)
+    }
 
     pub fn add_redundancy_many_u64(vec : &Vec<u64>, ctx : &Context) -> Vec<u64> {
 
@@ -405,6 +421,40 @@ impl LUT {
     LUT(glwe)
 
     }
+
+
+    // pub fn add_lut_assign(
+    //     &self
+    //     lut_l : &LUT,
+    //     lut_r : &LUT,
+    // )
+    // -> GlweCiphertext<Vec<u64>>
+    // {
+    //     let mut res = GlweCiphertext::new(0_u64, lut_l.0.glwe_size(), lut_l.0.polynomial_size());
+    
+    //     res.as_mut().iter_mut()
+    //     .zip(
+    //         lut_l.0.as_ref().iter().zip(lut_r.0.as_ref().iter())
+    //         ).for_each(|(dst, (&lhs, &rhs))| *dst = lhs + rhs);
+    //     return res; 
+    // }
+
+
+    pub fn add_lut(
+        &self,
+        lut_r : &LUT,
+    )
+    -> GlweCiphertext<Vec<u64>>
+    {
+        let mut res = GlweCiphertext::new(0_u64, self.0.glwe_size(), self.0.polynomial_size());
+    
+        res.as_mut().iter_mut()
+        .zip(
+            self.0.as_ref().iter().zip(lut_r.0.as_ref().iter())
+            ).for_each(|(dst, (&lhs, &rhs))| *dst = lhs + rhs);
+        return res; 
+    }
+    
 
 
 }
