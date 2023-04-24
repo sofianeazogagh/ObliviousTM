@@ -1,26 +1,11 @@
 
 use std::time::Instant;
 use rayon::prelude::*;
-// use num_complex::Complex;
-// use tfhe::{core_crypto::prelude::*, boolean::parameters};
-// use aligned_vec::{ABox};
 
-use tfhe::boolean::public_key;
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
+use crate::headers::*;
 
-
-
-// #[path = "./helpers.rs"] mod helpers;
-// use helpers::CryptoKeyRing;
-
-#[path = "./headers.rs"] mod headers;
-
-use crate::unitest_baacc2d::headers::LUT;
-
-use self::headers::PrivateKey;
-use self::headers::PublicKey;
-use self::headers::Context;
 
 
 
@@ -36,30 +21,30 @@ pub fn blind_array_access2d() {
 
 
     // Our input message
-    // let column = 1u64;
-    // let line = 0;
-    // let line_encoded = 16u64 + line;
+    let column = 1u64;
+    let line = 0;
+    let line_encoded = 16u64 + line;
 
     // let line = 1u64;
     // let column = 2;
 
 
-    // let lwe_columns = private_key.allocate_and_encrypt_lwe(column, &mut ctx);
-    // let lwe_line = private_key.allocate_and_encrypt_lwe(line_encoded, &mut ctx);
+    let lwe_columns = private_key.allocate_and_encrypt_lwe(column, &mut ctx);
+    let lwe_line = private_key.allocate_and_encrypt_lwe(line_encoded, &mut ctx);
 
 
 
 
-    // let array2d : Vec<Vec<u64>> = vec![
-    //     vec![0,1,2,3,0,1,2,3],
-    //     vec![4,5,6,7,4,5,6,7],
-    //     vec![8,9,10,11,8,9,10,11],
-    //     vec![12,13,14,15,12,13,14,15],
-    //     vec![0,1,2,3,0,1,2,3],
-    //     vec![4,5,6,7,4,5,6,7],
-    //     vec![8,9,10,11,8,9,10,11],
-    //     vec![12,13,14,15,12,13,14,15]
-    // ];
+    let array2d : Vec<Vec<u64>> = vec![
+        vec![0,1,2,3,0,1,2,3],
+        vec![4,5,6,7,4,5,6,7],
+        vec![8,9,10,11,8,9,10,11],
+        vec![12,13,14,15,12,13,14,15],
+        vec![0,1,2,3,0,1,2,3],
+        vec![4,5,6,7,4,5,6,7],
+        vec![8,9,10,11,8,9,10,11],
+        vec![12,13,14,15,12,13,14,15]
+    ];
 
 
     // let array2d : Vec<Vec<u64>> = vec![
@@ -69,20 +54,11 @@ pub fn blind_array_access2d() {
     // ];
 
     
+    // let array2d : Vec<Vec<u64>> = vec![
+    //     vec![0,1,2,3],
+    //     vec![4,5,6,7]
+    // ];
 
-    let array2d : Vec<Vec<u64>> = vec![
-        vec![0,1,2,3],
-        vec![4,5,6,7]
-    ];
-
-    for line in 0..array2d.clone().len(){
-
-        for column in 0..array2d[line].len(){
-
-
-
-    let lwe_columns = private_key.allocate_and_encrypt_lwe(column as u64, &mut ctx);
-    let lwe_line = private_key.allocate_and_encrypt_lwe(16+line as u64, &mut ctx);
 
     let mut vec_of_lut: Vec<LUT> = Vec::new();
     for f in array2d.clone(){
@@ -99,16 +75,12 @@ pub fn blind_array_access2d() {
         &public_key
     );
     let duration_bacc2d = start_bacc2d.elapsed();
-    println!("Temps BACC2D = {:?}",duration_bacc2d);
+    println!("Time BACC2D = {:?}",duration_bacc2d);
 
     let result = private_key.decrypt_lwe_big_key(&ct_res, &mut ctx);
 
-    // println!("Checking result...");
-    // println!("BACC2D input ({line},{column}) got {result}");
-    print!(" {} ",result);
-}
-println!(" ");
-}
+    println!("Checking result...");
+    println!("BACC2D input ({line},{column}) got {result}");
 
 
 }

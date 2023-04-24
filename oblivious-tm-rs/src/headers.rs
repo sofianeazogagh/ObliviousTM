@@ -1,8 +1,7 @@
 use aligned_vec::ABox;
 use num_complex::Complex;
-use tfhe::boolean::{public_key, server_key};
 use tfhe::{core_crypto::prelude::*};
-use tfhe::shortint::{prelude::*, parameters};
+use tfhe::shortint::{prelude::*};
 
 
 
@@ -13,14 +12,16 @@ pub struct Context{
     full_message_modulus : usize,
     signed_decomposer : SignedDecomposer<u64>,
     encryption_generator : EncryptionRandomGenerator<ActivatedRandomGenerator>,
-    secret_generator : SecretRandomGenerator<ActivatedRandomGenerator>
+    secret_generator : SecretRandomGenerator<ActivatedRandomGenerator>,
+    delta_tilde : usize // a remplacer par box_size
 }
 
 impl Context {
     pub fn from(parameters : Parameters) -> Context {
         let big_lwe_dimension = LweDimension(parameters.polynomial_size.0);
-        let delta = (1u64 << 63 ) / (parameters.message_modulus.0 * parameters.carry_modulus.0) as u64;
         let full_message_modulus = parameters.message_modulus.0 * parameters.carry_modulus.0;
+        let delta = (1u64 << 63 ) / (full_message_modulus) as u64;
+        
         let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1)); // a changer peut-être pour les autres params
 
         // Request the best seeder possible, starting with hardware entropy sources and falling back to
@@ -30,13 +31,15 @@ impl Context {
         let seeder = boxed_seeder.as_mut();
     
         // Create a generator which uses a CSPRNG to generate secret keys
-        let mut secret_generator =
+        let secret_generator =
             SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
     
         // Create a generator which uses two CSPRNGs to generate public masks and secret encryption
         // noise
-        let mut encryption_generator =
+        let encryption_generator =
             EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
+        
+        let delta_tilde = parameters.polynomial_size.0 / full_message_modulus as usize;
 
 
         Context{
@@ -46,7 +49,9 @@ impl Context {
             full_message_modulus,
             signed_decomposer,
             secret_generator,
-            encryption_generator
+            encryption_generator,
+            delta_tilde
+
         }
     }
 
@@ -68,9 +73,8 @@ impl Context {
     pub fn carry_modulus(&self) -> CarryModulus {self.parameters.carry_modulus}
     pub fn delta(&self) -> u64 {self.delta}
     pub fn full_message_modulus(&self) -> usize {self.full_message_modulus}
+    pub fn delta_tilde(&self) -> usize {self.delta_tilde}
     // pub fn signed_decomposer(&self) -> SignedDecomposer<u64> {self.signed_decomposer}
-
-
 
 }
 
@@ -79,9 +83,6 @@ pub struct PrivateKey{
     big_lwe_sk: LweSecretKey<Vec<u64>>,
     glwe_sk: GlweSecretKey<Vec<u64>>,
     public_key : PublicKey,
-    // lwe_ksk: LweKeyswitchKey<Vec<u64>>,
-    // fourier_bsk: FourierLweBootstrapKey<ABox<[Complex<f64>]>>,
-    // pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>
 }
 
 impl PrivateKey{
@@ -186,17 +187,11 @@ impl PrivateKey{
             pfpksk
         };
 
-
-        
-
         PrivateKey{
             small_lwe_sk,
             big_lwe_sk,
             glwe_sk,
             public_key
-            // lwe_ksk,
-            // fourier_bsk,
-            // pfpksk
         }
     }
 
@@ -248,7 +243,7 @@ impl PrivateKey{
             ctx.glwe_modular_std_dev(),
             &mut ctx.encryption_generator,
         );
-        output_glwe   
+        output_glwe
     }
 
     pub fn encrypt_glwe(&self, output_glwe: &mut GlweCiphertext<Vec<u64>>, pt : PlaintextList<Vec<u64>>, ctx: &mut Context){
@@ -261,30 +256,31 @@ impl PrivateKey{
         );
     }
 
-    fn decrypt_and_decode_glwe(&self, input_glwe : GlweCiphertext<Vec<u64>>, ctx: &Context ) -> Vec<u64>{
+    pub fn decrypt_and_decode_glwe(&self, input_glwe : &GlweCiphertext<Vec<u64>>, ctx: &Context ) -> Vec<u64>{
         let mut plaintext_res = PlaintextList::new(0, PlaintextCount(ctx.polynomial_size().0));
-        decrypt_glwe_ciphertext(&self.glwe_sk, &input_glwe, &mut plaintext_res);
+        decrypt_glwe_ciphertext(&self.get_glwe_sk(), &input_glwe, &mut plaintext_res);
     
         // To round our 4 bits of message
         // In the paper we return the complicated sum times -1, so here we invert that -1, otherwise we
         // could apply the wrapping_neg on our function and remove it here
         let decoded: Vec<_> = plaintext_res
             .iter()
-            .map(|x| (ctx.signed_decomposer.closest_representable(*x.0) / ctx.delta).wrapping_neg() % ctx.full_message_modulus() as u64)
+            .map(|x| (ctx.signed_decomposer.closest_representable(*x.0) / ctx.delta()).wrapping_neg() % ctx.full_message_modulus() as u64)
             .collect();
 
         decoded
         
     }
 
-    pub fn debug_lwe(&self, string : &str, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &mut Context){
+    pub fn debug_lwe(&self, string : &str, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &Context){
         // Decrypt the PBS multiplication result
         let plaintext: Plaintext<u64> =
-        decrypt_lwe_ciphertext(&self.small_lwe_sk, &ciphertext);
+        decrypt_lwe_ciphertext(&self.get_small_lwe_sk(), &ciphertext);
         let result: u64 =
         ctx.signed_decomposer.closest_representable(plaintext.0) / ctx.delta();
         println!("{} {}",string,result);
     }
+
 
 
 
@@ -296,7 +292,7 @@ impl PrivateKey{
 
 
 
-pub struct PublicKey {
+pub struct PublicKey { // utilKey ou ServerKey
     pub lwe_ksk: LweKeyswitchKey<Vec<u64>>,
     pub fourier_bsk: FourierLweBootstrapKey<ABox<[Complex<f64>]>>,
     pub pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>
@@ -328,7 +324,7 @@ impl LUT {
         LUT(new_lut)
     }
 
-    pub fn add_redundancy_many_u64(vec : &Vec<u64>, ctx : &Context) -> Vec<u64> {
+    fn add_redundancy_many_u64(vec : &Vec<u64>, ctx : &Context) -> Vec<u64> {
 
         // N/(p/2) = size of each block, to correct noise from the input we introduce the notion of
         // box, which manages redundancy to yield a denoised value for several noisy values around
@@ -411,7 +407,6 @@ impl LUT {
     // Prepare our output GLWE in which we pack our LWEs
     let mut glwe = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size());
     
-
     // Keyswitch and pack
     private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(
         &public_key.pfpksk,
@@ -420,6 +415,26 @@ impl LUT {
     );
     LUT(glwe)
 
+    }
+
+
+
+    pub fn to_many_lwe(self, public_key : &PublicKey, ctx : &Context) -> Vec<LweCiphertext<Vec<u64>>>{
+        let mut many_lwe : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+        
+        for i in 0..ctx.full_message_modulus(){
+
+            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+            extract_lwe_sample_from_glwe_ciphertext(
+                &self.0,
+                &mut lwe_sample,
+                MonomialDegree(i*ctx.delta_tilde() as usize));
+            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+            keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
+            
+            many_lwe.push(switched);
+        }
+        many_lwe
     }
 
 
@@ -460,6 +475,21 @@ impl LUT {
 }
 
 
+// pub struct LWE (pub(crate) LweCiphertext<Vec<u64>>);
+
+
+// impl LWE {
+
+
+//     pub fn new_small(ctx : &Context) -> LWE{
+//         let lwe = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size());
+//         LWE(lwe)
+//     }
+
+
+// }
+
+
 
 
 
@@ -472,7 +502,7 @@ mod test{
 
 
     // use tfhe::core_crypto::prelude::*;
-    use tfhe::shortint::{parameters::PARAM_MESSAGE_4_CARRY_0, public_key};
+    use tfhe::shortint::{parameters::PARAM_MESSAGE_4_CARRY_0};
 
     use super::*;
 
@@ -524,11 +554,12 @@ mod test{
             many_lwe.push(lwe);
         }
         let lut = LUT::from_vec_of_lwe(many_lwe, public_key, &ctx);
-        let output_pt =  private_key.decrypt_and_decode_glwe(lut.0, &ctx);
+        let output_pt =  private_key.decrypt_and_decode_glwe(&lut.0, &ctx);
         println!("Test many LWE to one GLWE");
         println!("{:?}", output_pt);
-
     }
+
+
     
 
 }

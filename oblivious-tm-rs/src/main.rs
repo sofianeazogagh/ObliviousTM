@@ -19,6 +19,15 @@ use crate::unitest_baacc2d::blind_array_access2d;
 mod blind_permutation;
 use crate::blind_permutation::blind_permutation;
 
+
+mod blind_insert;
+use crate::blind_insert::blind_insert;
+
+// mod demultiplexer;
+// use crate::demultiplexer::demultiplixer;
+
+
+
 // mod gist;
 // use crate::gist::*;
 
@@ -35,6 +44,13 @@ pub fn main() {
     // blind_array_access2d(); // from unitest_bacc2d
 
     blind_permutation(); // from blind_permutation
+
+    // blind_insert(); // from blind_insert
+
+
+    // demultiplixer(); // from demultiplexer
+
+
 
     // test_multi_pbs();
 
