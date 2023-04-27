@@ -69,7 +69,6 @@ pub fn main() {
     let glwe_size = glwe_sk.glwe_dimension().to_glwe_size();
     // Our 4 bits message space
     let message_modulus = 1u64 << 4;
-    let message_modulusi64 = (1u64 << 4) as i64;
     // Delta used to encode 4 bits of message + a bit of padding on u64
     let delta = (1_u64 << 63) / message_modulus;
 
@@ -79,7 +78,7 @@ pub fn main() {
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![1_u64, 0, 1, 2,1,0,1,1];
+    let mut tape = vec![1_u64, 2, 1];
     while tape.len()<16 {
         tape.push(2_u64); }
     println!("{:?}",tape);
@@ -131,18 +130,17 @@ pub fn main() {
 
 
     println!("State Encrypted");
-    let moins1= ((((-1_i64)%message_modulusi64)+message_modulusi64)%message_modulusi64)as u64;
     let instruction_write = vec![
-        vec![0, 0, 1, 0, 1, 2, 0],
-        vec![0, 0, moins1 , 0, moins1, 1, 0],
-        vec![0, 0, 0, 0, moins1, 0, 0],
+        vec![0, 0, 1, 0, 1, 0, 0],
+        vec![0, 0, 31 , 0, 31, 0, 0],
+        vec![0, 0, 0, 0, 31, 0, 0],
 
     ];
 
     let instruction_position = vec![
         vec![31, 31, 1, 1, 31, 31, 0],
         vec![31, 31, 1, 1, 1, 31, 0],
-        vec![31, 1, 31, 1, 31, 0, 0],
+        vec![31, 1, 31, 1, 31, 31, 0],
     ];
 
     let instruction_state = vec![
@@ -182,9 +180,10 @@ pub fn main() {
         // Check we recovered the original message for each plaintext we encrypted
         println!("Result of OTM: {:?}", cleartext_list);
 
-        write_new_cell_content(big_lwe_dimension,fourier_bsk.clone(),small_lwe_dimension,lwe_ksk.clone(),polynomial_size,message_modulus,delta,glwe_dimension,pfpksk.clone(),&mut tape,cellContent.clone(),state.clone(),instruction_write.clone());
+
+        tape = write_new_cell_content(big_lwe_dimension,fourier_bsk.clone(),small_lwe_dimension,lwe_ksk.clone(),polynomial_size,message_modulus,delta,glwe_dimension,pfpksk.clone(),&mut tape,cellContent.clone(),state.clone(),instruction_write.clone(),small_lwe_sk.clone(),glwe_sk.clone());
         change_head_position(big_lwe_sk.clone(),big_lwe_dimension,fourier_bsk.clone(),small_lwe_dimension,lwe_ksk.clone(),polynomial_size,message_modulus,delta,glwe_dimension,pfpksk.clone(),&mut tape,cellContent.clone(),state.clone(),instruction_position.clone());
-        let state = get_new_state(big_lwe_dimension,fourier_bsk.clone(),small_lwe_dimension,lwe_ksk.clone(),polynomial_size,message_modulus,delta,glwe_dimension,pfpksk.clone(),cellContent.clone(),state.clone(),instruction_state.clone());
+        state = get_new_state(big_lwe_dimension,fourier_bsk.clone(),small_lwe_dimension,lwe_ksk.clone(),polynomial_size,message_modulus,delta,glwe_dimension,pfpksk.clone(),cellContent.clone(),state.clone(),instruction_state.clone(),small_lwe_sk.clone());
         let mut plain = decrypt_lwe_ciphertext(&small_lwe_sk,&state);
         let encoded = signed_decomposer.closest_representable(plain.0);
         let cleartext = encoded/delta;
@@ -231,7 +230,9 @@ pub fn write_new_cell_content(
     tape:&mut GlweCiphertext<Vec<u64>>,
     cellContent:LweCiphertext<Vec<u64>>,
     state:LweCiphertext<Vec<u64>>,
-    instruction_write: Vec<GlweCiphertext<Vec<u64>>>)
+    instruction_write: Vec<GlweCiphertext<Vec<u64>>>,
+    small_lwe_sk:LweSecretKeyOwned<u64>,
+glwe_sk:GlweSecretKeyOwned<u64>)->GlweCiphertext<Vec<u64>>
     {
 
     let newCellContent = bacc2d(
@@ -247,14 +248,31 @@ pub fn write_new_cell_content(
         glwe_dimension,
         pfpksk.clone(),
         cellContent);
+
+
+
     let mut res=LweCiphertext::new(0_64,small_lwe_dimension.to_lwe_size());
     keyswitch_lwe_ciphertext(&lwe_ksk,&newCellContent,&mut res);
+        let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
+        let mut plain = decrypt_lwe_ciphertext(&small_lwe_sk,&res);
+        let encoded = signed_decomposer.closest_representable(plain.0);
+        let cleartext = encoded/delta;
+        println!("newcellcontent {}",cleartext);
 
+
+        let new_cell_content_ciphertext_list = one_lwe_to_lwe_ciphertext_list(res, message_modulus, small_lwe_dimension, polynomial_size);
         let mut newCellContentGlwe:GlweCiphertext<Vec<u64>>= GlweCiphertext::new(0_u64, tape.glwe_size(), tape.polynomial_size());
 
-        private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext(&pfpksk, &mut newCellContentGlwe,&res);
+        // private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext(&pfpksk, &mut newCellContentGlwe,&res);
+
+        private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(&pfpksk, &mut newCellContentGlwe, &new_cell_content_ciphertext_list);
+
+
+
+
         let mut result  = GlweCiphertext::new(0_u64, newCellContentGlwe.glwe_size(), newCellContentGlwe.polynomial_size());
         glwe_ciphertext_add(&tape,&newCellContentGlwe,&mut result);
+        return result;
 }
 
 pub fn change_head_position(
@@ -312,10 +330,20 @@ pub fn get_new_state(
     pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>,
     cellContent:LweCiphertext<Vec<u64>>,
     mut state:LweCiphertext<Vec<u64>>,
-    instruction_state:Vec<GlweCiphertext<Vec<u64>>>)
+    instruction_state:Vec<GlweCiphertext<Vec<u64>>>,
+    small_lwe_sk:LweSecretKeyOwned<u64>
+    )
     ->LweCiphertext<Vec<u64>>{
 
-    let state = bacc2d(
+    let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
+    let mut plain = decrypt_lwe_ciphertext(&small_lwe_sk,&state);
+    let encoded = signed_decomposer.closest_representable(plain.0);
+    let cleartext = encoded/delta;
+    println!("state IN {}",cleartext);
+
+
+
+    let statesortie = bacc2d(
         instruction_state,
         big_lwe_dimension,
         state,
@@ -328,8 +356,10 @@ pub fn get_new_state(
         glwe_dimension,
         pfpksk,
         cellContent);
+
+
     let mut res=LweCiphertext::new(0_64,small_lwe_dimension.to_lwe_size());
-    keyswitch_lwe_ciphertext(&lwe_ksk,&state,&mut res);
+    keyswitch_lwe_ciphertext(&lwe_ksk,&statesortie,&mut res);
 
     return res;
 

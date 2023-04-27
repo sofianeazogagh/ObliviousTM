@@ -13,18 +13,20 @@ pub fn blind_array_access2d() {
     // Define the parameters for a 4 bits message able to hold the doubled 2 bits message
 
     let small_lwe_dimension = LweDimension(742);
-    let glwe_dimension = GlweDimension(1);
+    let glwe_dimension= GlweDimension(1);
     let big_lwe_dimension = LweDimension(2048);
-    let polynomial_size = PolynomialSize(2048);
-    let lwe_modular_std_dev = StandardDev(0.000007069849454709433);
-    let glwe_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
-    let pbs_base_log = DecompositionBaseLog(23);
-    let pbs_level = DecompositionLevelCount(1);
-    let ks_base_log = DecompositionBaseLog(3);
-    let ks_level = DecompositionLevelCount(5);
-    let pfks_base_log = DecompositionBaseLog(23); //15
-    let pfks_level = DecompositionLevelCount(1); //2
-    let pfks_modular_std_dev = StandardDev(0.00000000000000029403601535432533);
+    let polynomial_size= PolynomialSize(2048);
+    let lwe_modular_std_dev= StandardDev(0.000007069849454709433);
+    let glwe_modular_std_dev= StandardDev(0.00000000000000029403601535432533);
+    let pbs_base_log= DecompositionBaseLog(23);
+    let pbs_level= DecompositionLevelCount(1);
+    let ks_level= DecompositionLevelCount(5);
+    let ks_base_log= DecompositionBaseLog(3);
+    let pfks_level= DecompositionLevelCount(1);
+    let pfks_base_log= DecompositionBaseLog(23);
+    let pfks_modular_std_dev= StandardDev(0.00000000000000029403601535432533);
+    let cbs_level= DecompositionLevelCount(0);
+    let cbs_base_log= DecompositionBaseLog(0);
 
     // Request the best seeder possible, starting with hardware entropy sources and falling back to
     // /dev/random on Unix systems if enabled via cargo features
@@ -163,8 +165,7 @@ pub fn blind_array_access2d() {
     // Create a SignedDecomposer to perform the rounding of the decrypted plaintext
     // We pass a DecompositionBaseLog of 5 and a DecompositionLevelCount of 1 indicating we want to
     // round the 5 MSB, 1 bit of padding plus our 4 bits of message
-    let signed_decomposer =
-        SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
+    let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
 
 
     // let mut array2d: Vec<Vec<u64>> = Vec::new();
@@ -287,9 +288,9 @@ pbs_results.par_extend(
             switched
         }),
     );
-    
+
     let duration_multi_pbs = start_multi_pbs.elapsed();
-    println!("Temps multi pbs + key switch : {:?}",duration_multi_pbs);
+    // println!("Temps multi pbs + key switch : {:?}",duration_multi_pbs);
     //////////////////// LWE CIPHERTEXT PACKING////////////////////////
     /*
     Create a list of LWE ciphertext which will be converted into a GLWE ciphertext
@@ -298,14 +299,13 @@ pbs_results.par_extend(
     let start_packing = Instant::now();
     let accumulator_final = many_lwe_to_glwe(
         polynomial_size, 
-        small_lwe_dimension, 
+        small_lwe_dimension,
         message_modulus, 
         pbs_results, 
         delta, 
         glwe_dimension, 
         pfpksk);
     let duration_packing = start_packing.elapsed();
-    println!(" Temps Packing : {:?}",duration_packing);
 
     //////////////////// FINAL PBS ////////////////////////
     let mut ct_res = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
@@ -356,7 +356,7 @@ fn many_lwe_to_glwe(
 }
 
 // Here we will define a helper function to generate an accumulator for a PBS
-fn generate_accumulator_via_vector(
+pub fn generate_accumulator_via_vector(
     polynomial_size: PolynomialSize,
     message_modulus: usize,
     delta: u64,
@@ -397,7 +397,7 @@ fn generate_accumulator_via_vector(
 
 
 // Here we will define a helper function to generate an accumulator for a PBS
-fn generate_accumulator_via_vector_of_ciphertext(
+pub fn generate_accumulator_via_vector_of_ciphertext(
     polynomial_size: PolynomialSize,
     lwe_dimension : LweDimension,
     message_modulus: usize,
@@ -431,13 +431,17 @@ fn generate_accumulator_via_vector_of_ciphertext(
 
     let half_box_size = box_size / 2;
 
+    for a_i in output_vec[0..half_box_size].iter_mut() {
+        wrapping_neg_lwe(a_i);
+    }
+
     output_vec.rotate_left(half_box_size);
 
     output_vec
 }
 
 
-fn encrypt_accumulator_as_glwe_ciphertext(
+pub fn encrypt_accumulator_as_glwe_ciphertext(
     glwe_secret_key: &GlweSecretKeyOwned<u64>,
     noise: impl DispersionParameter,
     encryption_generator: &mut EncryptionRandomGenerator<ActivatedRandomGenerator>,
@@ -459,3 +463,32 @@ fn encrypt_accumulator_as_glwe_ciphertext(
     accumulator
 }
 
+pub fn wrapping_neg_lwe(lwe : &mut LweCiphertext<Vec<u64>>)
+{
+    for ai in lwe.as_mut(){
+        *ai = (*ai).wrapping_neg();
+    }
+}
+
+pub fn one_lwe_to_lwe_ciphertext_list(
+    input_lwe: LweCiphertext<Vec<u64>>,
+    modulus : u64,
+    small_lwe_dimension:LweDimension,
+    polynomial_size:PolynomialSize,
+)
+    -> LweCiphertextList<Vec<u64>>
+{
+    // N/(p/2) = size of each block, to correct noise from the input we introduce the notion of
+    // box, which manages redundancy to yield a denoised value for several noisy values around
+    // a true input value.
+    let box_size = polynomial_size.0 / modulus as usize;
+    let redundant_lwe = vec![input_lwe.into_container();box_size].concat();
+    // let half_box_size = box_size / 2;
+    // redundant_lwe.rotate_left(half_box_size);
+    let lwe_ciphertext_list =  LweCiphertextList::from_container(
+        redundant_lwe,
+        small_lwe_dimension.to_lwe_size());
+
+
+    lwe_ciphertext_list
+}
