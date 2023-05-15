@@ -3,6 +3,7 @@ use std::vec;
 
 use rayon::prelude::*;
 
+use tfhe::boolean::public_key;
 use tfhe::core_crypto::prelude::*;
 use tfhe::shortint::parameters::PARAM_MESSAGE_4_CARRY_0;
 
@@ -34,22 +35,22 @@ pub fn blind_push(){
     let lwe_push = private_key.allocate_and_encrypt_lwe(push_u64, &mut ctx);
     private_key.debug_glwe("lut :", &lut_push.lut.0, &ctx);
 
+    let mut ct_16 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    trivially_encrypt_lwe_ciphertext(&mut ct_16, Plaintext(ctx.full_message_modulus() as u64 * ctx.delta()));
+    private_key.debug_lwe("ct_16", &ct_16, &ctx);
+
     let start_push = Instant::now();
 
     let mut to_push = LUT::from_lwe(lwe_push, public_key, &ctx, false);
     private_key.debug_glwe("element to push :", &to_push.0, &ctx);
 
-    let mut ct_16 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-    trivially_encrypt_lwe_ciphertext(&mut ct_16, Plaintext(16*ctx.delta())); // on a besoin que 3-->13 dans la lut final (donc on fait 1tour + une rotation de stack_element) on peut aussi faire 16-3 et construire la lut a partir de 13
-    private_key.debug_lwe("ct_16", &ct_16, &ctx);
 
     let stack_len = lut_push.number_of_elements;
     let mut rotation = LweCiphertext::new(0_64,ctx.small_lwe_dimension().to_lwe_size());
-    lwe_ciphertext_sub(&mut rotation, &ct_16, &stack_len); // rotation = 16 - index_to_push = - index_to_push
+    lwe_ciphertext_sub(&mut rotation, &ct_16, &stack_len); // rotation = 16 - index_to_push = - index_to_push 
     private_key.debug_lwe("rotation", &rotation, &ctx);
     blind_rotate_assign(&rotation, &mut to_push.0, &public_key.fourier_bsk);
 
-    private_key.debug_glwe("after rotation:", &to_push.0, &ctx);
 
     // Sum all the rotated glwe to get the final glwe permuted
     let result = _glwe_ciphertext_add(&lut_push.lut.0, &to_push.0 );
@@ -78,10 +79,6 @@ pub fn blind_push(){
             let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
             keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
             switched
-            // the result will be modulo 32
-            // let mut output = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-            // lwe_ciphertext_sub(&mut output,&ct_16 , &switched);
-            // output
         }),
     );
 
@@ -92,13 +89,6 @@ pub fn blind_push(){
         result_push_u64.push(pt);
     }
     println!("Inserted array : {:?} ",result_push_u64 );
-
-
-    // let mut ground_truth = original_array;
-    // ground_truth.insert(index_insertion_u64 as usize, insertion_u64);
-    // ground_truth.resize(ctx.full_message_modulus(), 0);
-    // assert_eq!(result_insert_u64,ground_truth);
-    // println!("gt = {:?}",ground_truth);
 
 
 
