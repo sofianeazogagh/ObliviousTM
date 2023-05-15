@@ -28,17 +28,17 @@ pub fn blind_permutation(){
 
 
     // Our array that we want to permut
-    // let original_array = vec![7,3,1,5,2,4];
-    let original_array = vec![7,3,1,5,2,4,8,9,10,15,11,14,13,6,0,12];
+    let original_array = vec![7,3,1,5,2,4];
+    // let original_array = vec![7,3,1,5,2,4,8,9,10,15,11,14,13,6,0,12];
 
     // Our private permutation
-    // let permutation : Vec<u64> = vec![1,0,2,4,5,3];  //---> target = [3,7,1,4,5,2]
-    let permutation : Vec<u64> = vec![0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];  //---> target = original_array
+    let permutation : Vec<u64> = vec![1,0,2,4,5,3];  //---> target = [3,7,1,4,5,2]
+    // let permutation : Vec<u64> = vec![0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];  //---> target = original_array
 
 
-    println!("Permutation : {:?}",permutation);
+    // println!("Permutation : {:?}",permutation);
 
-    println!("Original array : {:?}",original_array);
+    // println!("Original array : {:?}",original_array);
 
     
 
@@ -46,8 +46,9 @@ pub fn blind_permutation(){
 
 
     let mut private_permutation : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    for perm in permutation{
+    for perm in permutation.clone(){
         let lwe_permutation = private_key.allocate_and_encrypt_lwe((2*ctx.full_message_modulus() as u64)-perm, &mut ctx);
+        // let lwe_permutation = private_key.allocate_and_encrypt_lwe(perm, &mut ctx);
         private_permutation.push(lwe_permutation);
     }
 
@@ -85,28 +86,32 @@ pub fn blind_permutation(){
     }
 
 
-    let box_size = ctx.polynomial_size().0 / ctx.full_message_modulus()as usize;
-    let half_box_size = box_size / 2;
+    let half_box_size = ctx.box_size() / 2;
 
-    // Result of the permutation
-    let mut result_perm : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    for i in 0..original_array.len(){
+    
+    let mut ct_32 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    trivially_encrypt_lwe_ciphertext(&mut ct_32, Plaintext(2 * ctx.full_message_modulus() as u64)); // chiffré trival de 32 : (0,..,0,32)
+    
+    let mut result_perm: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    result_perm.par_extend(
+    (0..ctx.full_message_modulus())
+        .into_par_iter()
+        .map(|i| {
+            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+            extract_lwe_sample_from_glwe_ciphertext(
+                &result,
+                &mut lwe_sample,
+                MonomialDegree((i * ctx.box_size() + half_box_size) as usize),
+            );
+            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+            keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
 
-        let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
-        extract_lwe_sample_from_glwe_ciphertext(
-            &result,
-            &mut lwe_sample,
-            MonomialDegree((i*ctx.delta_tilde() + half_box_size) as usize));
-
-        let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-        keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
-        
-        // the result will be modulo 32
-        let mut output = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-        trivially_encrypt_lwe_ciphertext(&mut output, Plaintext(2 * ctx.full_message_modulus() as u64 ));
-        lwe_ciphertext_sub_assign(&mut output,&switched);
-        result_perm.push(output);
-    }
+            // the result will be modulo 32
+            let mut output = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+            lwe_ciphertext_sub(&mut output,&ct_32 , &switched);
+            output
+        }),
+    );
     let duration_perm = start_perm.elapsed();
 
 
@@ -117,6 +122,20 @@ pub fn blind_permutation(){
         result_perm_u64.push(pt);
     }
     println!("Permuted array : {:?} ",result_perm_u64 );
+
+
+    let mut ground_truth : Vec<u64> = vec![0;ctx.full_message_modulus()];
+    for i in 0..original_array.len(){
+        let index = permutation[i] as usize;
+        ground_truth[index] = original_array[i];
+    }
+
+
+    assert_eq!(result_perm_u64,ground_truth);
+
+
+    println!("gt = {:?}",ground_truth);
+
 
 
     println!("Time permutation : {:?}",duration_perm);
@@ -183,10 +202,8 @@ fn one_lwe_to_lwe_ciphertext_list(
     // N/(p/2) = size of each block, to correct noise from the input we introduce the notion of
     // box, which manages redundancy to yield a denoised value for several noisy values around
     // a true input value.
-    let box_size = ctx.polynomial_size().0 / ctx.full_message_modulus() as usize;
-    let redundant_lwe = vec![input_lwe.into_container();box_size].concat();
-    // let half_box_size = box_size / 2;
-    // redundant_lwe.rotate_left(half_box_size);
+
+    let redundant_lwe = vec![input_lwe.into_container();ctx.box_size()].concat();
     let lwe_ciphertext_list =  LweCiphertextList::from_container(
         redundant_lwe,
         ctx.small_lwe_dimension().to_lwe_size());
@@ -209,7 +226,24 @@ pub fn _glwe_ciphertext_add(
     res.as_mut().iter_mut()
     .zip(
         ct1.as_ref().iter().zip(ct2.as_ref().iter())
-        ).for_each(|(dst, (&lhs, &rhs))| *dst = lhs + rhs);
+        ).for_each(|(dst, (&lhs, &rhs))| *dst = lhs.wrapping_add(rhs));
     return res; 
 }
 
+
+
+
+
+
+#[cfg(test)]
+mod test{
+
+    use super::*;
+
+    #[test]
+    fn test_blind_permutation(){
+
+            blind_permutation();
+        
+    }
+}

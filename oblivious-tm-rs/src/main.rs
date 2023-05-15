@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-mod unitest_baacc2d;
-use crate::unitest_baacc2d::blind_array_access2d;
+mod blind_array_access2d;
+use crate::blind_array_access2d::blind_array_access2d;
 
 // mod optim_multi_pbs;
 // use crate::optim_multi_pbs::test_multi_pbs;
@@ -19,9 +19,15 @@ use crate::unitest_baacc2d::blind_array_access2d;
 mod blind_permutation;
 use crate::blind_permutation::blind_permutation;
 
+mod blind_insertion;
+use crate::blind_insertion::blind_insertion;
 
-mod blind_insert;
-use crate::blind_insert::blind_insert;
+mod blind_push;
+use crate::blind_push::blind_push;
+
+
+mod private_insert;
+use crate::private_insert::private_insert;
 
 // mod demultiplexer;
 // use crate::demultiplexer::demultiplixer;
@@ -43,9 +49,15 @@ pub fn main() {
 
     // blind_array_access2d(); // from unitest_bacc2d
 
-    blind_permutation(); // from blind_permutation
+    // blind_permutation(); // from blind_permutation
 
-    // blind_insert(); // from blind_insert
+    // blind_insertion(); // from blind_insertion
+
+    blind_push();
+
+    // private_insert(); // from private_insert
+
+
 
 
     // demultiplixer(); // from demultiplexer
