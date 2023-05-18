@@ -27,6 +27,8 @@ pub fn blind_array_access2d() {
     let pfks_modular_std_dev= StandardDev(0.00000000000000029403601535432533);
     let cbs_level= DecompositionLevelCount(0);
     let cbs_base_log= DecompositionBaseLog(0);
+    let ciphertext_modulus = CiphertextModulus::new_native();
+
 
     // Request the best seeder possible, starting with hardware entropy sources and falling back to
     // /dev/random on Unix systems if enabled via cargo features
@@ -63,6 +65,7 @@ pub fn blind_array_access2d() {
         pbs_base_log,
         pbs_level,
         glwe_modular_std_dev,
+        ciphertext_modulus,
         &mut encryption_generator,
     );
 
@@ -88,6 +91,7 @@ pub fn blind_array_access2d() {
         ks_level,
         big_lwe_dimension,
         small_lwe_dimension,
+        ciphertext_modulus
     );
     generate_lwe_keyswitch_key(
         &big_lwe_sk,
@@ -106,6 +110,7 @@ pub fn blind_array_access2d() {
         small_lwe_dimension,
         glwe_dimension.to_glwe_size(),
         polynomial_size,
+        ciphertext_modulus
     );
     // Here there is some freedom for the choice of the last polynomial from algorithm 2
     // By convention from the paper the polynomial we use here is the constant -1
@@ -148,6 +153,7 @@ pub fn blind_array_access2d() {
         &small_lwe_sk,
         plaintext_1,
         lwe_modular_std_dev,
+        ciphertext_modulus,
         &mut encryption_generator,
     );
 
@@ -155,6 +161,7 @@ pub fn blind_array_access2d() {
         &small_lwe_sk,
         plaintext_final,
         lwe_modular_std_dev,
+        ciphertext_modulus,
         &mut encryption_generator,
     );
 
@@ -203,7 +210,8 @@ pub fn blind_array_access2d() {
             &mut encryption_generator,
             polynomial_size,
             glwe_dimension.to_glwe_size(),
-            accumulator_u64);
+            accumulator_u64,
+        ciphertext_modulus);
         accumulators.push(accumulator);
     }
 
@@ -222,7 +230,8 @@ pub fn blind_array_access2d() {
         delta, 
         glwe_dimension, 
         pfpksk, 
-        lwe_ciphertext_final);
+        lwe_ciphertext_final,
+    ciphertext_modulus);
     
     let duration_bacc2d = start_bacc2d.elapsed();
     println!("Temps BACC2D = {:?}",duration_bacc2d);
@@ -252,7 +261,9 @@ pub fn bacc2d(
     delta: u64, 
     glwe_dimension: GlweDimension, 
     pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>, 
-    lwe_ciphertext_final: LweCiphertext<Vec<u64>>
+    lwe_ciphertext_final: LweCiphertext<Vec<u64>>,
+    ciphertext_modulus:CiphertextModulus<u64>
+
 ) -> LweCiphertext<Vec<u64>>
 where
  {
@@ -276,14 +287,14 @@ pbs_results.par_extend(
     accumulators
         .into_par_iter()
         .map(|acc| {
-            let mut pbs_ct = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+            let mut pbs_ct = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size(),ciphertext_modulus);
             programmable_bootstrap_lwe_ciphertext(
                 &lwe_ciphertext_1,
                 &mut pbs_ct,
                 &acc,
                 &fourier_bsk,
             );
-            let mut switched = LweCiphertext::new(0, small_lwe_dimension.to_lwe_size());
+            let mut switched = LweCiphertext::new(0, small_lwe_dimension.to_lwe_size(),ciphertext_modulus);
             keyswitch_lwe_ciphertext(&lwe_ksk, &mut pbs_ct, &mut switched);
             switched
         }),
@@ -304,11 +315,12 @@ pbs_results.par_extend(
         pbs_results, 
         delta, 
         glwe_dimension, 
-        pfpksk);
+        pfpksk,
+        ciphertext_modulus);
     let duration_packing = start_packing.elapsed();
 
     //////////////////// FINAL PBS ////////////////////////
-    let mut ct_res = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size());
+    let mut ct_res = LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size(),ciphertext_modulus);
     programmable_bootstrap_lwe_ciphertext(&lwe_ciphertext_final, &mut ct_res, &accumulator_final, &fourier_bsk,);
     ct_res
 }
@@ -321,7 +333,9 @@ fn many_lwe_to_glwe(
     many_lwe: Vec<LweCiphertext<Vec<u64>>>, 
     delta: u64, 
     glwe_dimension: GlweDimension, 
-    pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>
+    pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>,
+    ciphertext_modulus:CiphertextModulus<u64>
+
 ) 
 -> GlweCiphertext<Vec<u64>> 
 {
@@ -330,7 +344,8 @@ fn many_lwe_to_glwe(
         small_lwe_dimension, 
         message_modulus as usize, 
         many_lwe,
-        delta);
+        delta,
+        ciphertext_modulus);
     let mut lwe_container : Vec<u64> = Vec::new();
     for ct in many_lwe_as_accumulator {
         let mut lwe = ct.into_container();
@@ -341,10 +356,10 @@ fn many_lwe_to_glwe(
 
 
 
-    let lwe_ciphertext_list =  LweCiphertextList::from_container(lwe_container,small_lwe_dimension.to_lwe_size());
+    let lwe_ciphertext_list =  LweCiphertextList::from_container(lwe_container,small_lwe_dimension.to_lwe_size(),ciphertext_modulus);
 
     // Prepare our output GLWE in which we pack our LWEs
-    let mut accumulator_final = GlweCiphertext::new(0, glwe_dimension.to_glwe_size(), polynomial_size);
+    let mut accumulator_final = GlweCiphertext::new(0, glwe_dimension.to_glwe_size(), polynomial_size,ciphertext_modulus);
 
     // Keyswitch and pack
     private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(
@@ -403,6 +418,7 @@ pub fn generate_accumulator_via_vector_of_ciphertext(
     message_modulus: usize,
     many_lwe: Vec<LweCiphertext<Vec<u64>>>,
     _delta: u64,
+    ciphertext_modulus:CiphertextModulus<u64>
 )  -> Vec<LweCiphertext<Vec<u64>>>
     where
 {
@@ -414,7 +430,7 @@ pub fn generate_accumulator_via_vector_of_ciphertext(
     // Create the accumulator
     let mut output_vec : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 
-    let ct_0 = LweCiphertext::new(0_64, lwe_dimension.to_lwe_size());
+    let ct_0 = LweCiphertext::new(0_64, lwe_dimension.to_lwe_size(),ciphertext_modulus);
 
     // Fill each box with the encoded denoised value
     for i in 0..message_modulus { //many_lwe.len()
@@ -448,11 +464,12 @@ pub fn encrypt_accumulator_as_glwe_ciphertext(
     polynomial_size: PolynomialSize,
     glwe_size: GlweSize,
     accumulator_u64: Vec<u64>,
+    ciphertext_modulus:CiphertextModulus<u64>
 ) ->GlweCiphertext<Vec<u64>>
     where
 {
     let accumulator_plaintext = PlaintextList::from_container(accumulator_u64);
-    let mut accumulator = GlweCiphertext::new(0, glwe_size, polynomial_size);
+    let mut accumulator = GlweCiphertext::new(0, glwe_size, polynomial_size,ciphertext_modulus);
     encrypt_glwe_ciphertext(
         glwe_secret_key,
         &mut accumulator,
@@ -475,6 +492,7 @@ pub fn one_lwe_to_lwe_ciphertext_list(
     modulus : u64,
     small_lwe_dimension:LweDimension,
     polynomial_size:PolynomialSize,
+    ciphertext_modulus:CiphertextModulus<u64>
 )
     -> LweCiphertextList<Vec<u64>>
 {
@@ -487,7 +505,7 @@ pub fn one_lwe_to_lwe_ciphertext_list(
     // redundant_lwe.rotate_left(half_box_size);
     let lwe_ciphertext_list =  LweCiphertextList::from_container(
         redundant_lwe,
-        small_lwe_dimension.to_lwe_size());
+        small_lwe_dimension.to_lwe_size(),ciphertext_modulus);
 
 
     lwe_ciphertext_list

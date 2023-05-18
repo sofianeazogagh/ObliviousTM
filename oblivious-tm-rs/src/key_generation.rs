@@ -1,31 +1,25 @@
 use tfhe::core_crypto::prelude::*;
 use aligned_vec::*;
 use std::time::{Instant};
-use tfhe::core_crypto::fft_impl::c64;
+use tfhe::core_crypto::fft_impl::fft64::c64;
 use tfhe::core_crypto::prelude::*;
 
 pub fn key_generation(small_lwe_dimension:LweDimension,
-                       glwe_dimension:GlweDimension,
-                       big_lwe_dimension:LweDimension,
-                       polynomial_size:PolynomialSize,
-                       lwe_modular_std_dev:StandardDev,
-                       glwe_modular_std_dev:StandardDev,
-                       pbs_base_log:DecompositionBaseLog,
-                       pbs_level:DecompositionLevelCount,
-                       ks_level:DecompositionLevelCount,
-                       ks_base_log:DecompositionBaseLog,
-                       pfks_level:DecompositionLevelCount,
-                       pfks_base_log:DecompositionBaseLog,
-                       pfks_modular_std_dev:StandardDev
-                      )->
-                       (LweSecretKeyOwned<u64>,
-                        GlweSecretKeyOwned<u64>,
-                        LweSecretKeyOwned<u64>,
-                        FourierLweBootstrapKey<ABox<[c64]>>,
-                        LweKeyswitchKeyOwned<u64>,
-                        LwePrivateFunctionalPackingKeyswitchKeyOwned<u64>,
-                        EncryptionRandomGenerator<ActivatedRandomGenerator>
-                       ){
+                      glwe_dimension:GlweDimension,
+                      big_lwe_dimension:LweDimension,
+                      polynomial_size:PolynomialSize,
+                      lwe_modular_std_dev:StandardDev,
+                      glwe_modular_std_dev:StandardDev,
+                      pbs_base_log:DecompositionBaseLog,
+                      pbs_level:DecompositionLevelCount,
+                      ks_level:DecompositionLevelCount,
+                      ks_base_log:DecompositionBaseLog,
+                      pfks_level:DecompositionLevelCount,
+                      pfks_base_log:DecompositionBaseLog,
+                      pfks_modular_std_dev:StandardDev,
+                      ciphertext_modulus:CiphertextModulus<u64>
+
+) -> (LweSecretKeyOwned<u64>, GlweSecretKeyOwned<u64>, LweSecretKeyOwned<u64>, FourierLweBootstrapKey<ABox<[c64]>>, LweKeyswitchKeyOwned<u64>, LwePrivateFunctionalPackingKeyswitchKeyOwned<u64>, EncryptionRandomGenerator<ActivatedRandomGenerator>, LwePrivateFunctionalPackingKeyswitchKeyListOwned<u64>) {
 
 
     // Request the best seeder possible, starting with hardware entropy sources and falling back to
@@ -63,17 +57,17 @@ pub fn key_generation(small_lwe_dimension:LweDimension,
         pbs_base_log,
         pbs_level,
         glwe_modular_std_dev,
+        ciphertext_modulus,
         &mut encryption_generator,
     );
 
     // Create the empty bootstrapping key in the Fourier domain
     let mut fourier_bsk = FourierLweBootstrapKey::new(
         std_bootstrapping_key.input_lwe_dimension(),
-        std_bootstrapping_key.glwe_size(),
-        std_bootstrapping_key.polynomial_size(),
-        std_bootstrapping_key.decomposition_base_log(),
-        std_bootstrapping_key.decomposition_level_count(),
-    );
+    std_bootstrapping_key.glwe_size(),
+    std_bootstrapping_key.polynomial_size(),
+    std_bootstrapping_key.decomposition_base_log(),
+    std_bootstrapping_key.decomposition_level_count());
 
     // Use the conversion function (a memory optimized version also exists but is more complicated
     // to use) to convert the standard bootstrapping key to the Fourier domain
@@ -88,6 +82,7 @@ pub fn key_generation(small_lwe_dimension:LweDimension,
         ks_level,
         big_lwe_dimension,
         small_lwe_dimension,
+        ciphertext_modulus
     );
     generate_lwe_keyswitch_key(
         &big_lwe_sk,
@@ -106,6 +101,7 @@ pub fn key_generation(small_lwe_dimension:LweDimension,
         small_lwe_dimension,
         glwe_dimension.to_glwe_size(),
         polynomial_size,
+        ciphertext_modulus
     );
     // Here there is some freedom for the choice of the last polynomial from algorithm 2
     // By convention from the paper the polynomial we use here is the constant -1
@@ -122,5 +118,15 @@ pub fn key_generation(small_lwe_dimension:LweDimension,
         |x| x,
         &last_polynomial,
     );
-    return (small_lwe_sk,glwe_sk,big_lwe_sk,fourier_bsk,lwe_ksk,pfpksk,encryption_generator)
+    let cbs_pfpksk = par_allocate_and_generate_new_circuit_bootstrap_lwe_pfpksk_list(
+        &big_lwe_sk,
+        &glwe_sk,
+        pfks_base_log,
+        pfks_level,
+        pfks_modular_std_dev,
+        ciphertext_modulus,
+        &mut encryption_generator,
+    );
+
+    return (small_lwe_sk, glwe_sk, big_lwe_sk, fourier_bsk, lwe_ksk, pfpksk, encryption_generator, cbs_pfpksk)
 }

@@ -1,7 +1,7 @@
 use num_complex::Complex;
 use tfhe::core_crypto::prelude::*;
 use aligned_vec::{ABox};
-use tfhe::core_crypto::fft_impl::c64;
+use tfhe::core_crypto::fft_impl::fft64::c64;
 use crate::unitest_baacc2d::*;
 
 pub fn encrypt_instructions(
@@ -12,7 +12,8 @@ pub fn encrypt_instructions(
     polynomial_size:PolynomialSize,
     mut encryption_generator: &mut EncryptionRandomGenerator<ActivatedRandomGenerator>,
     glwe_dimension:GlweDimension,
-    instructions:Vec<Vec<u64>>)
+    instructions:Vec<Vec<u64>>,
+    ciphertext_modulus:CiphertextModulus<u64>)
     ->Vec<GlweCiphertext<Vec<u64>>>
 
 {
@@ -28,7 +29,8 @@ pub fn encrypt_instructions(
             &mut encryption_generator,
             polynomial_size,
             glwe_dimension.to_glwe_size(),
-            accumulator_u64);
+            accumulator_u64,
+        ciphertext_modulus);
         accumulators.push(accumulator);
     }
   return accumulators

@@ -1,5 +1,5 @@
 use tfhe::core_crypto::prelude::*;
-use tfhe::shortint::prelude::*;
+// use tfhe::shortint::prelude::*;
 use std::time::{Instant, Duration};
 
 pub fn generate_accumulator<F>(
@@ -8,6 +8,7 @@ pub fn generate_accumulator<F>(
         message_modulus: usize,
         delta: u64,
         f: F,
+        ciphertext_modulus:CiphertextModulus<u64>,
     ) -> GlweCiphertextOwned<u64>
         where
             F: Fn(u64) -> u64,
@@ -41,7 +42,7 @@ pub fn generate_accumulator<F>(
         let accumulator_plaintext = PlaintextList::from_container(accumulator_u64);
 
         let accumulator =
-            allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext);
+            allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext,ciphertext_modulus);
 
         accumulator
 }
@@ -55,6 +56,7 @@ pub fn generate_accumulator_via_vector_of_ciphertext(
     message_modulus: usize,
     many_lwe: Vec<LweCiphertext<Vec<u64>>>,
     _delta: u64,
+    ciphertext_modulus:CiphertextModulus<u64>,
 )  -> Vec<LweCiphertext<Vec<u64>>>
     where
 {
@@ -66,7 +68,7 @@ pub fn generate_accumulator_via_vector_of_ciphertext(
     // Create the accumulator
     let mut output_vec : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 
-    let ct_0 = LweCiphertext::new(0_64, lwe_dimension.to_lwe_size());
+    let ct_0 = LweCiphertext::new(0_64, lwe_dimension.to_lwe_size(),ciphertext_modulus);
 
     // Fill each box with the encoded denoised value
     for i in 0..message_modulus { //many_lwe.len()
@@ -96,11 +98,12 @@ pub fn encrypt_accumulator_as_glwe_ciphertext(
     polynomial_size: PolynomialSize,
     glwe_size: GlweSize,
     accumulator_u64: Vec<u64>,
+    ciphertext_modulus:CiphertextModulus<u64>,
 ) ->GlweCiphertext<Vec<u64>>
     where
 {
     let accumulator_plaintext = PlaintextList::from_container(accumulator_u64);
-    let mut accumulator = GlweCiphertext::new(0, glwe_size, polynomial_size);
+    let mut accumulator = GlweCiphertext::new(0, glwe_size, polynomial_size,ciphertext_modulus);
     encrypt_glwe_ciphertext(
         glwe_secret_key,
         &mut accumulator,
