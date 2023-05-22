@@ -25,6 +25,9 @@ use crate::blind_insertion::blind_insertion;
 mod blind_push;
 use crate::blind_push::blind_push;
 
+mod blind_pop;
+use crate::blind_pop::blind_pop;
+
 
 mod private_insert;
 use crate::private_insert::private_insert;
@@ -53,7 +56,9 @@ pub fn main() {
 
     // blind_insertion(); // from blind_insertion
 
-    blind_push();
+    // blind_push();
+
+    blind_pop();
 
     // private_insert(); // from private_insert
 

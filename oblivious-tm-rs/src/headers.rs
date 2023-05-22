@@ -238,7 +238,7 @@ impl PrivateKey{
         lwe_ciphertext
     }
 
-    pub fn decrypt_lwe(&self, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &mut Context) -> u64 {
+    pub fn decrypt_lwe(&self, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &Context) -> u64 {
         // Decrypt the PBS multiplication result
         let plaintext: Plaintext<u64> =
         decrypt_lwe_ciphertext(&self.small_lwe_sk, &ciphertext);
@@ -387,7 +387,7 @@ impl PublicKey{
     ) -> LweCiphertext<Vec<u64>> 
     {
     
-        let eq_scalar_accumulator = LUT::from_function(|x| ( x == 0 as u64) as u64, ctx);
+        let eq_scalar_accumulator = LUT::from_function(|x| ( x == scalar as u64) as u64, ctx);
         let mut res_eq = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size());
         programmable_bootstrap_lwe_ciphertext(
             &ct_input,
@@ -705,12 +705,13 @@ impl LUTStack{
         }
     }
 
-    pub fn from_lut(ctx : &Context, lut : LUT, public_key : &PublicKey) -> LUTStack{
+    pub fn from_lut(lut : LUT, public_key : &PublicKey, ctx : &Context, private_key : &PrivateKey) -> LUTStack{
 
 
         let mut number_of_elements = public_key.allocate_and_trivially_encrypt_lwe(ctx.full_message_modulus() as u64, ctx);
+        
 
-        for i in ctx.full_message_modulus()..0{
+        for i in (0..ctx.full_message_modulus()).rev(){
 
             let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
             extract_lwe_sample_from_glwe_ciphertext(
@@ -719,8 +720,13 @@ impl LUTStack{
                 MonomialDegree(i*ctx.box_size() as usize));
             let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
             keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
+            
 
-            let cp = public_key.eq_scalar(&switched, 0_64, ctx);
+            private_key.debug_lwe("switched = ", &switched, &ctx);
+            let cp = public_key.eq_scalar(&switched, 0, &ctx);
+            // private_key.debug_lwe("switched == 0 : ", &cp, &ctx);
+            // let cp = public_key.eq_scalar(&switched, 0, &ctx);
+            private_key.debug_lwe("switched == 0 : ", &cp, &ctx);
             lwe_ciphertext_sub_assign(&mut number_of_elements, &cp);
 
         }
@@ -814,6 +820,38 @@ mod test{
         println!("Test LWE to LUT");
         println!("{:?}", output_pt);
     }
+
+
+    #[test]
+
+    fn test_eq_scalar(){
+
+        let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
+        let private_key = PrivateKey::new(&mut ctx);
+        let public_key = &private_key.get_public_key();
+        let our_input = 0u64;
+        let lwe = private_key.allocate_and_encrypt_lwe(our_input, &mut ctx);
+
+        for i in 0..16{
+        let cp = public_key.eq_scalar(&lwe, i, &ctx);
+        let res = private_key.decrypt_lwe(&cp, &ctx);
+        println!("{} == {} : {}", our_input, i, res);
+        }
+
+    }
+
+
+    // #[test]
+    // fn test_lut_stack_from_lut(){
+    //     let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
+    //     let private_key = PrivateKey::new(&mut ctx);
+    //     let public_key = &private_key.public_key;
+    //     let array = vec![0,1,2,3,4];
+    //     let lut = LUT::from_vec(&array, &private_key, &mut ctx);
+
+    //     let lut_stack = LUTStack::from_lut(lut, public_key, &ctx);
+
+    // }
 
 
     

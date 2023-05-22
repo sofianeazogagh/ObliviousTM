@@ -15,7 +15,7 @@ use self::headers::LUTStack;
 
 
 
-pub fn blind_push(){
+pub fn blind_pop(){
 
 
     // Create Context and generate key
@@ -28,45 +28,52 @@ pub fn blind_push(){
     let original_array = vec![2,4,6,8];
     println!("Original array : {:?} ",original_array );
 
-    let push_u64 = 3_u64;
+    
 
-    let lut_original_array = LUT::from_vec(&original_array, &private_key, &mut ctx);
-    let lut_push = LUTStack::from_lut( lut_original_array, public_key, &ctx, &private_key);
-    // let lut_push = LUTStack::from_vec(&original_array, &private_key, &mut ctx);
+    let mut lut_original = LUTStack::from_vec(&original_array, &private_key, &mut ctx);
 
-
-
-    let lwe_push = private_key.allocate_and_encrypt_lwe(push_u64, &mut ctx);
 
     let mut ct_16 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
     trivially_encrypt_lwe_ciphertext(&mut ct_16, Plaintext(ctx.full_message_modulus() as u64 * ctx.delta()));
 
-    let start_push = Instant::now();
+    let lwe_one = public_key.allocate_and_trivially_encrypt_lwe(1_u64, &ctx);
 
-    let mut to_push = LUT::from_lwe(lwe_push, public_key, &ctx, false);
+    let start_pop = Instant::now();
 
-    let stack_len = lut_push.number_of_elements;
+    
+
+    let mut lwe_pop = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size() );
+    let mut lwe_pop_not_switched = LweCiphertext::new(0, ctx.big_lwe_dimension().to_lwe_size() );
+    let stack_len = lut_original.number_of_elements;
+
     let mut rotation = LweCiphertext::new(0_64,ctx.small_lwe_dimension().to_lwe_size());
-    lwe_ciphertext_sub(&mut rotation, &ct_16, &stack_len); // rotation = 16 - index_to_push = - index_to_push 
-    blind_rotate_assign(&rotation, &mut to_push.0, &public_key.fourier_bsk);
 
+    lwe_ciphertext_sub(&mut rotation, &stack_len, &lwe_one); // rotation = stack_len - 1
+    blind_rotate_assign(&rotation, &mut lut_original.lut.0, &public_key.fourier_bsk);
+
+    extract_lwe_sample_from_glwe_ciphertext(&lut_original.lut.0, &mut lwe_pop_not_switched, MonomialDegree(0));
+    keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &lwe_pop_not_switched, &mut lwe_pop);
+
+
+    let lut_pop = LUT::from_lwe(lwe_pop, &public_key, &ctx, false);
 
     // Sum all the rotated glwe to get the final glwe permuted
-    let result = _glwe_ciphertext_add(&lut_push.lut.0, &to_push.0 );
+    let mut result = _glwe_ciphertext_add(&lut_original.lut.0, &lut_pop.0 );
 
 
-    // TODO mettre a jour number of element et lut dans la LUTStack
+    public_key.wrapping_neg_lwe(&mut rotation);
+    // TODO : mettre a jour number of element dans lut_original et 
+    blind_rotate_assign(&rotation, &mut result, &public_key.fourier_bsk);
 
 
-
-    let duration_push = start_push.elapsed();
+    let duration_pop = start_pop.elapsed();
 
 
     // verification by extracting lwe 
     let half_box_size = ctx.box_size() / 2;
 
-    let mut result_push: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    result_push.par_extend(
+    let mut result_pop: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    result_pop.par_extend(
     (0..ctx.full_message_modulus())
         .into_par_iter()
         .map(|i| {
@@ -84,14 +91,14 @@ pub fn blind_push(){
     );
 
 
-    let mut result_push_u64 : Vec<u64> = Vec::new();
-    for lwe in result_push{
+    let mut result_pop_u64 : Vec<u64> = Vec::new();
+    for lwe in result_pop{
         let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
-        result_push_u64.push(pt);
+        result_pop_u64.push(pt);
     }
-    println!("Array pushed : {:?} ",result_push_u64 );
+    println!("Array pop : {:?} ",result_pop_u64 );
 
-    println!("Time insertion : {:?}",duration_push);
+    println!("Time pop : {:?}",duration_pop);
 
 
 }
@@ -196,9 +203,9 @@ mod test{
     use super::*;
 
     #[test]
-    fn test_blind_push(){
+    fn test_blind_pop(){
 
-            blind_push();
+            blind_pop();
         
     }
 }
