@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::time::Instant;
 use std::vec;
 
@@ -17,6 +18,11 @@ use self::headers::LUTStack;
 
 pub fn blind_pop(){
 
+    let mut total_time = Duration::default();
+
+    for _ in 0..100{
+
+
 
     // Create Context and generate key
     let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
@@ -25,8 +31,8 @@ pub fn blind_pop(){
 
 
    
-    let original_array = vec![2,4,6,8];
-    println!("Original array : {:?} ",original_array );
+    let original_array = vec![2,4,6,9];
+    // println!("Original array : {:?} ",original_array );
 
     
 
@@ -55,50 +61,71 @@ pub fn blind_pop(){
     keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &lwe_pop_not_switched, &mut lwe_pop);
 
 
-    let lut_pop = LUT::from_lwe(lwe_pop, &public_key, &ctx, false);
+    let lut_used_to_delete = LUT::from_lwe(&lwe_pop, &public_key, &ctx, false);
 
-    // Sum all the rotated glwe to get the final glwe permuted
-    let mut result = _glwe_ciphertext_add(&lut_original.lut.0, &lut_pop.0 );
-
-
+    // Sum the rotated glwe with the lut poped and rotate it
+    let mut result = LUT(_glwe_ciphertext_add(&lut_original.lut.0, &lut_used_to_delete.0 ));
     public_key.wrapping_neg_lwe(&mut rotation);
-    // TODO : mettre a jour number of element dans lut_original et 
-    blind_rotate_assign(&rotation, &mut result, &public_key.fourier_bsk);
+    blind_rotate_assign(&rotation, &mut result.0, &public_key.fourier_bsk);
+
+    
+    // TODO : mettre a jour number of element et nouvelle lut dans lut_original
+
+    let lwe_one = public_key.allocate_and_trivially_encrypt_lwe(1_u64, &ctx);
+    let mut new_number_of_element = LweCiphertext::new(0_u64, ctx.small_lwe_dimension().to_lwe_size());
+    lwe_ciphertext_sub(&mut new_number_of_element, &stack_len, &lwe_one);
+
+    let lut_pop = LUTStack{
+        lut : result,
+        number_of_elements : new_number_of_element
+    };
 
 
-    let duration_pop = start_pop.elapsed();
+    // let duration_pop = start_pop.elapsed();
+
+    let end_pop = Instant::now();
+    let time_pop = end_pop - start_pop;
 
 
-    // verification by extracting lwe 
-    let half_box_size = ctx.box_size() / 2;
+    total_time = total_time + time_pop;
 
-    let mut result_pop: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    result_pop.par_extend(
-    (0..ctx.full_message_modulus())
-        .into_par_iter()
-        .map(|i| {
-            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
-            extract_lwe_sample_from_glwe_ciphertext(
-                &result,
-                &mut lwe_sample,
-                MonomialDegree((i*ctx.box_size() + half_box_size - 1) as usize),
-            );
-            // key switching
-            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-            keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
-            switched
-        }),
-    );
-
-
-    let mut result_pop_u64 : Vec<u64> = Vec::new();
-    for lwe in result_pop{
-        let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
-        result_pop_u64.push(pt);
     }
-    println!("Array pop : {:?} ",result_pop_u64 );
+    let average_time = total_time / 100 as u32;
 
-    println!("Time pop : {:?}",duration_pop);
+
+    println!("Temps moyen d'exécution blind_push : {:?}", average_time);
+
+
+    // // verification by extracting lwe 
+    // let half_box_size = ctx.box_size() / 2;
+
+    // let mut result_pop: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    // result_pop.par_extend(
+    // (0..ctx.full_message_modulus())
+    //     .into_par_iter()
+    //     .map(|i| {
+    //         let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+    //         extract_lwe_sample_from_glwe_ciphertext(
+    //             &lut_pop.lut.0,
+    //             &mut lwe_sample,
+    //             MonomialDegree((i*ctx.box_size() + half_box_size - 1) as usize),
+    //         );
+    //         // key switching
+    //         let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    //         keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
+    //         switched
+    //     }),
+    // );
+
+
+    // let mut result_pop_u64 : Vec<u64> = Vec::new();
+    // for lwe in result_pop{
+    //     let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
+    //     result_pop_u64.push(pt);
+    // }
+    // println!("Array pop : {:?} ",result_pop_u64 );
+
+    // println!("Time pop : {:?}",duration_pop);
 
 
 }

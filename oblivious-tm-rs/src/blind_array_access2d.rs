@@ -1,10 +1,16 @@
 
+use std::time::Duration;
 use std::time::Instant;
 use rayon::prelude::*;
 
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
-use crate::headers::*;
+
+#[path = "./headers.rs"] mod headers;
+use self::headers::PrivateKey;
+use self::headers::PublicKey;
+use self::headers::Context;
+use self::headers::LUT;
 
 
 
@@ -12,6 +18,10 @@ use crate::headers::*;
 
 pub fn blind_array_access2d() {
 
+
+    // let mut total_time = Duration::default();
+
+    // for _ in 0..100{
 
 
     // Create Context and generate key
@@ -76,6 +86,19 @@ pub fn blind_array_access2d() {
     );
     let duration_bacc2d = start_bacc2d.elapsed();
     println!("Time BACC2D = {:?}",duration_bacc2d);
+
+    // let end_bacc2d = Instant::now();
+    // let time_bacc2d = end_bacc2d - start_bacc2d;
+
+
+    // total_time = total_time + time_bacc2d;
+
+    // }
+    // let average_time = total_time / 100 as u32;
+
+
+    // println!("Temps moyen d'exécution bacc2d : {:?}", average_time);
+
 
     let result = private_key.decrypt_lwe_big_key(&ct_res, &mut ctx);
 

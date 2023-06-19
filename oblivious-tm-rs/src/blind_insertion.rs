@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::time::Instant;
 use std::vec;
 
@@ -16,6 +17,9 @@ use self::headers::LUT;
 
 pub fn blind_insertion(){
 
+    let mut total_time = Duration::default();
+
+    for _ in 0..100{
 
     // Create Context and generate key
     let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
@@ -41,10 +45,13 @@ pub fn blind_insertion(){
 
 
 
-    // One LUT to many lwe
-    let mut many_lut = one_lut_to_many_lut(lut_original_array, public_key, &ctx);
+    // One LUT to many LUT
+    let mut many_lut = lut_original_array.to_many_lut(public_key, &ctx);
 
-    let lut_insertion = LUT::from_lwe(lwe_insertion, public_key, &ctx, false);
+    let lut_insertion = LUT::from_lwe(&lwe_insertion, public_key, &ctx, false);
+
+
+    //Updating the index
 
     let mut new_index : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
     for original_index in 0..many_lut.len(){
@@ -76,47 +83,54 @@ pub fn blind_insertion(){
         result = _glwe_ciphertext_add(&result,&many_lut[i].0);
     }
 
-    private_key.debug_glwe("after Sum", &result, &ctx);
+    // private_key.debug_glwe("after Sum", &result, &ctx);
 
 
-    let duration_insertion = start_insertion.elapsed();
+    // let duration_insertion = start_insertion.elapsed();
 
-
-    // verification by extracting lwe 
-    let half_box_size = ctx.box_size() / 2;
-    let mut ct_16 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-    trivially_encrypt_lwe_ciphertext(&mut ct_16, Plaintext(ctx.full_message_modulus() as u64));
-
-    let mut result_insert: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    result_insert.par_extend(
-    (0..ctx.full_message_modulus())
-        .into_par_iter()
-        .map(|i| {
-            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
-            extract_lwe_sample_from_glwe_ciphertext(
-                &result,
-                &mut lwe_sample,
-                MonomialDegree((i * ctx.box_size() + half_box_size) as usize),
-            );
-            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-            keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
-
-            // switched
-
-            // the result will be modulo 32
-            let mut output = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-            lwe_ciphertext_sub(&mut output,&ct_16 , &switched);
-            output
-        }),
-    );
-
-
-    let mut result_insert_u64 : Vec<u64> = Vec::new();
-    for lwe in result_insert{
-        let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
-        result_insert_u64.push(pt);
+    let end_insert = Instant::now();
+    let time_insert = end_insert - start_insertion;
+    total_time = total_time + time_insert;
     }
-    println!("Inserted array : {:?} ",result_insert_u64 );
+    let average_time = total_time / 100 as u32;
+    println!("Temps moyen d'exécution insert : {:?}", average_time);
+
+
+    // // verification by extracting lwe 
+    // let half_box_size = ctx.box_size() / 2;
+    // let mut ct_16 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    // trivially_encrypt_lwe_ciphertext(&mut ct_16, Plaintext(ctx.full_message_modulus() as u64));
+
+    // let mut result_insert: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    // result_insert.par_extend(
+    // (0..ctx.full_message_modulus())
+    //     .into_par_iter()
+    //     .map(|i| {
+    //         let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+    //         extract_lwe_sample_from_glwe_ciphertext(
+    //             &result,
+    //             &mut lwe_sample,
+    //             MonomialDegree((i * ctx.box_size() + half_box_size) as usize),
+    //         );
+    //         let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    //         keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
+
+    //         // switched
+
+    //         // the result will be modulo 32
+    //         let mut output = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    //         lwe_ciphertext_sub(&mut output,&ct_16 , &switched);
+    //         output
+    //     }),
+    // );
+
+
+    // let mut result_insert_u64 : Vec<u64> = Vec::new();
+    // for lwe in result_insert{
+    //     let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
+    //     result_insert_u64.push(pt);
+    // }
+    // println!("Inserted array : {:?} ",result_insert_u64 );
 
 
     // let mut ground_truth = original_array;
@@ -127,7 +141,7 @@ pub fn blind_insertion(){
 
 
 
-    println!("Time insertion : {:?}",duration_insertion);
+    // println!("Time insertion : {:?}",duration_insertion);
 
 
 }

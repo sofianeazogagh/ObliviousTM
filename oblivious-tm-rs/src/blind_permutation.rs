@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::time::Instant;
 
 use rayon::prelude::*;
@@ -19,6 +20,10 @@ use self::headers::LUT;
 
 
 pub fn blind_permutation(){
+
+    let mut total_time = Duration::default();
+
+     for _ in 0..100{
 
 
     // Create Context and generate key
@@ -86,59 +91,73 @@ pub fn blind_permutation(){
     }
 
 
-    let half_box_size = ctx.box_size() / 2;
-
-    
-    let mut ct_32 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-    trivially_encrypt_lwe_ciphertext(&mut ct_32, Plaintext(2 * ctx.full_message_modulus() as u64)); // chiffré trival de 32 : (0,..,0,32)
-    
-    let mut result_perm: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    result_perm.par_extend(
-    (0..ctx.full_message_modulus())
-        .into_par_iter()
-        .map(|i| {
-            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
-            extract_lwe_sample_from_glwe_ciphertext(
-                &result,
-                &mut lwe_sample,
-                MonomialDegree((i * ctx.box_size() + half_box_size) as usize),
-            );
-            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-            keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
-
-            // the result will be modulo 32
-            let mut output = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-            lwe_ciphertext_sub(&mut output,&ct_32 , &switched);
-            output
-        }),
-    );
     let duration_perm = start_perm.elapsed();
 
+    let end_perm = Instant::now();
+    let time_perm = end_perm - start_perm;
 
 
-    let mut result_perm_u64 : Vec<u64> = Vec::new();
-    for lwe in result_perm{
-        let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
-        result_perm_u64.push(pt);
+    total_time = total_time + time_perm;
+
     }
-    println!("Permuted array : {:?} ",result_perm_u64 );
+    let average_time = total_time / 100 as u32;
 
 
-    let mut ground_truth : Vec<u64> = vec![0;ctx.full_message_modulus()];
-    for i in 0..original_array.len(){
-        let index = permutation[i] as usize;
-        ground_truth[index] = original_array[i];
-    }
+    println!("Temps moyen d'exécution perm : {:?}", average_time);
 
 
-    assert_eq!(result_perm_u64,ground_truth);
+    // let half_box_size = ctx.box_size() / 2;
+
+    
+    // let mut ct_32 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    // trivially_encrypt_lwe_ciphertext(&mut ct_32, Plaintext(2 * ctx.full_message_modulus() as u64)); // chiffré trival de 32 : (0,..,0,32)
+    
+    // let mut result_perm: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    // result_perm.par_extend(
+    // (0..ctx.full_message_modulus())
+    //     .into_par_iter()
+    //     .map(|i| {
+    //         let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+    //         extract_lwe_sample_from_glwe_ciphertext(
+    //             &result,
+    //             &mut lwe_sample,
+    //             MonomialDegree((i * ctx.box_size() + half_box_size) as usize),
+    //         );
+    //         let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    //         keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
+
+    //         // the result will be modulo 32
+    //         let mut output = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    //         lwe_ciphertext_sub(&mut output,&ct_32 , &switched);
+    //         output
+    //     }),
+    // );
 
 
-    println!("gt = {:?}",ground_truth);
+
+    // let mut result_perm_u64 : Vec<u64> = Vec::new();
+    // for lwe in result_perm{
+    //     let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
+    //     result_perm_u64.push(pt);
+    // }
+    // println!("Permuted array : {:?} ",result_perm_u64 );
+
+
+    // let mut ground_truth : Vec<u64> = vec![0;ctx.full_message_modulus()];
+    // for i in 0..original_array.len(){
+    //     let index = permutation[i] as usize;
+    //     ground_truth[index] = original_array[i];
+    // }
+
+
+    // assert_eq!(result_perm_u64,ground_truth);
+
+
+    // println!("gt = {:?}",ground_truth);
 
 
 
-    println!("Time permutation : {:?}",duration_perm);
+    // println!("Time permutation : {:?}",duration_perm);
 
 
 }

@@ -4,18 +4,6 @@
 mod blind_array_access2d;
 use crate::blind_array_access2d::blind_array_access2d;
 
-// mod optim_multi_pbs;
-// use crate::optim_multi_pbs::test_multi_pbs;
-
-// mod test_glwe;
-// use crate::test_glwe::test_add2;
-// use crate::test_glwe::test_add;
-// use crate::test_glwe::*;
-
-// mod one_hot_slot;
-// use crate::one_hot_slot::test_one_hot_slot;
-
-
 mod blind_permutation;
 use crate::blind_permutation::blind_permutation;
 
@@ -28,25 +16,30 @@ use crate::blind_push::blind_push;
 mod blind_pop;
 use crate::blind_pop::blind_pop;
 
+mod blind_retrieve;
+use crate::blind_retrieve::blind_retrieve;
 
 mod private_insert;
 use crate::private_insert::private_insert;
 
+
+
+
+
+
+
 // mod demultiplexer;
 // use crate::demultiplexer::demultiplixer;
-
-
 
 // mod gist;
 // use crate::gist::*;
 
 
-mod headers;
-
 
 // mod blind_rotation;
 // mod helpers;
 
+// mod headers;
 
 pub fn main() {
 
@@ -56,26 +49,21 @@ pub fn main() {
 
     // blind_insertion(); // from blind_insertion
 
-    // blind_push();
+    // blind_push(); // from blind_push
 
-    blind_pop();
+    // blind_pop(); // from blind_pop
+
+    blind_retrieve(); // from blind_retrieve
 
     // private_insert(); // from private_insert
 
+    
 
-
-
-    // demultiplixer(); // from demultiplexer
-
-
-
-    // test_multi_pbs();
-
-    // test_glwe(); // from test_glwe
+    // test_glwe(); // from test_glwe 
 
     // test_one_hot_slot(); // from one_hot_slot
 
-    // blind_permutation(); // from private_computing
+    // demultiplixer(); // from demultiplexer
 
     // gist::lwe_to_glwe();
 

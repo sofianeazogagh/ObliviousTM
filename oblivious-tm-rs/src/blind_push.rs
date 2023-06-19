@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::time::Instant;
 use std::vec;
 
@@ -17,6 +18,9 @@ use self::headers::LUTStack;
 
 pub fn blind_push(){
 
+    // let mut total_time = Duration::default();
+
+    // for _ in 0..100{
 
     // Create Context and generate key
     let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
@@ -26,26 +30,25 @@ pub fn blind_push(){
 
    
     let original_array = vec![2,4,6,8];
-    println!("Original array : {:?} ",original_array );
+    // println!("Original array : {:?} ",original_array );
 
     let push_u64 = 3_u64;
 
     let lut_original_array = LUT::from_vec(&original_array, &private_key, &mut ctx);
-    let lut_push = LUTStack::from_lut( lut_original_array, public_key, &ctx, &private_key);
+    let mut lut_push = LUTStack::from_lut( lut_original_array, public_key, &ctx, &private_key);
     // let lut_push = LUTStack::from_vec(&original_array, &private_key, &mut ctx);
 
-
-
     let lwe_push = private_key.allocate_and_encrypt_lwe(push_u64, &mut ctx);
-
     let mut ct_16 = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
     trivially_encrypt_lwe_ciphertext(&mut ct_16, Plaintext(ctx.full_message_modulus() as u64 * ctx.delta()));
 
+    
+
     let start_push = Instant::now();
 
-    let mut to_push = LUT::from_lwe(lwe_push, public_key, &ctx, false);
+    let mut to_push = LUT::from_lwe(&lwe_push, public_key, &ctx, false);
 
-    let stack_len = lut_push.number_of_elements;
+    let stack_len = &lut_push.number_of_elements;
     let mut rotation = LweCiphertext::new(0_64,ctx.small_lwe_dimension().to_lwe_size());
     lwe_ciphertext_sub(&mut rotation, &ct_16, &stack_len); // rotation = 16 - index_to_push = - index_to_push 
     blind_rotate_assign(&rotation, &mut to_push.0, &public_key.fourier_bsk);
@@ -53,45 +56,63 @@ pub fn blind_push(){
 
     // Sum all the rotated glwe to get the final glwe permuted
     let result = _glwe_ciphertext_add(&lut_push.lut.0, &to_push.0 );
+    lut_push.lut.0 = result;
+
 
 
     // TODO mettre a jour number of element et lut dans la LUTStack
 
+    let lwe_one = public_key.allocate_and_trivially_encrypt_lwe(1_u64, &ctx);
+    let mut new_number_of_element = LweCiphertext::new(0_u64, ctx.small_lwe_dimension().to_lwe_size());
+    lwe_ciphertext_add(&mut new_number_of_element, &stack_len, &lwe_one);
+    lut_push.number_of_elements = new_number_of_element;
 
 
     let duration_push = start_push.elapsed();
 
-
-    // verification by extracting lwe 
-    let half_box_size = ctx.box_size() / 2;
-
-    let mut result_push: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    result_push.par_extend(
-    (0..ctx.full_message_modulus())
-        .into_par_iter()
-        .map(|i| {
-            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
-            extract_lwe_sample_from_glwe_ciphertext(
-                &result,
-                &mut lwe_sample,
-                MonomialDegree((i*ctx.box_size() + half_box_size - 1) as usize),
-            );
-            // key switching
-            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
-            keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
-            switched
-        }),
-    );
+    // let end_push = Instant::now();
+    // let time_push = end_push - start_push;
 
 
-    let mut result_push_u64 : Vec<u64> = Vec::new();
-    for lwe in result_push{
-        let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
-        result_push_u64.push(pt);
-    }
-    println!("Array pushed : {:?} ",result_push_u64 );
+    // total_time = total_time + time_push;
 
-    println!("Time insertion : {:?}",duration_push);
+    // }
+    // let average_time = total_time / 100 as u32;
+
+
+    // println!("Temps moyen d'exécution blind_push : {:?}", average_time);
+
+
+    // // verification by extracting lwe 
+    // let half_box_size = ctx.box_size() / 2;
+
+    // let mut result_push: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    // result_push.par_extend(
+    // (0..ctx.full_message_modulus())
+    //     .into_par_iter()
+    //     .map(|i| {
+    //         let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+    //         extract_lwe_sample_from_glwe_ciphertext(
+    //             &lut_push.lut.0,
+    //             &mut lwe_sample,
+    //             MonomialDegree((i*ctx.box_size() + half_box_size - 1) as usize),
+    //         );
+    //         // key switching
+    //         let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+    //         keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
+    //         switched
+    //     }),
+    // );
+
+
+    // let mut result_push_u64 : Vec<u64> = Vec::new();
+    // for lwe in result_push{
+    //     let pt = private_key.decrypt_lwe(&lwe, &mut ctx);
+    //     result_push_u64.push(pt);
+    // }
+    // println!("Array pushed : {:?} ",result_push_u64 );
+
+    // println!("Time insertion : {:?}",duration_push);
 
 
 }

@@ -1,5 +1,4 @@
-use core::num;
-use std::task::ready;
+
 
 use aligned_vec::ABox;
 use num_complex::Complex;
@@ -22,7 +21,7 @@ pub struct Context{
 
 impl Context {
     pub fn from(parameters : Parameters) -> Context {
-        let big_lwe_dimension = LweDimension(parameters.polynomial_size.0);
+        let big_lwe_dimension = LweDimension(parameters.glwe_dimension.0 * parameters.polynomial_size.0);
         let full_message_modulus = parameters.message_modulus.0 * parameters.carry_modulus.0;
         let delta = (1u64 << 63 ) / (full_message_modulus) as u64;
         
@@ -33,7 +32,7 @@ impl Context {
         let mut boxed_seeder = new_seeder();
         // Get a mutable reference to the seeder as a trait object from the Box returned by new_seeder
         let seeder = boxed_seeder.as_mut();
-    
+
         // Create a generator which uses a CSPRNG to generate secret keys
         let secret_generator =
             SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
@@ -348,6 +347,16 @@ impl PublicKey{
         }
     }
 
+    pub fn neg_lwe(&self, lwe : &LweCiphertext<Vec<u64>>, ctx : &Context) -> LweCiphertext<Vec<u64>>
+    {
+        let mut neg_lwe = LweCiphertext::new(0_u64 , ctx.small_lwe_dimension().to_lwe_size());
+        neg_lwe.as_mut().iter_mut()
+        .zip(
+            lwe.as_ref().iter()
+            ).for_each(|(dst, &lhs)| *dst = lhs.wrapping_neg());
+        return neg_lwe;
+    }
+
 
     pub fn allocate_and_trivially_encrypt_lwe(&self, input : u64, ctx: &Context) -> LweCiphertext<Vec<u64>>{
         let plaintext = Plaintext(ctx.delta().wrapping_mul(input));
@@ -399,6 +408,25 @@ impl PublicKey{
         keyswitch_lwe_ciphertext(&self.lwe_ksk, &mut res_eq, &mut switched);
     
         switched
+    }
+
+    pub fn one_lwe_to_lwe_ciphertext_list(&self,
+        input_lwe: LweCiphertext<Vec<u64>>,
+        ctx : &Context
+    ) 
+    -> LweCiphertextList<Vec<u64>> 
+    {
+        // N/(p/2) = size of each block, to correct noise from the input we introduce the notion of
+        // box, which manages redundancy to yield a denoised value for several noisy values around
+        // a true input value.
+    
+        let redundant_lwe = vec![input_lwe.into_container();ctx.box_size()].concat();
+        let lwe_ciphertext_list =  LweCiphertextList::from_container(
+            redundant_lwe,
+            ctx.small_lwe_dimension().to_lwe_size());
+        
+    
+        lwe_ciphertext_list
     }
     
 
@@ -478,16 +506,20 @@ impl LUT {
     }
 
 
-    fn add_redundancy(lwe : LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context, negacyclicity : bool ) -> Vec<LweCiphertext<Vec<u64>>>{
+    fn add_redundancy(lwe : &LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context, negacyclicity : bool ) -> Vec<LweCiphertext<Vec<u64>>>{
         let box_size = ctx.box_size();
-        let mut redundant_lwe : Vec<LweCiphertext<Vec<u64>>> = vec![lwe;box_size];
+        let mut redundant_lwe : Vec<LweCiphertext<Vec<u64>>> = vec![(*lwe).clone();box_size];
+    
 
         if negacyclicity {
+
+
+
             let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size());
             let half_box_size = box_size / 2;
             // Negate the first half_box_size coefficients to manage negacyclicity and rotate
-            for a_i in redundant_lwe[0..half_box_size].iter_mut() {
-                public_key.wrapping_neg_lwe(a_i);
+            for lwe_i in redundant_lwe[0..half_box_size].iter_mut() {
+                public_key.wrapping_neg_lwe(lwe_i);
             }
             redundant_lwe.resize(ctx.full_message_modulus()*box_size, ct_0);
             redundant_lwe.rotate_left(half_box_size);
@@ -498,6 +530,8 @@ impl LUT {
         }
 
     }
+
+    
 
 
     pub fn from_function<F>(f: F,ctx : &Context) -> LUT where F: Fn(u64) -> u64 {
@@ -569,7 +603,7 @@ impl LUT {
     }
 
 
-    pub fn from_lwe(lwe : LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context, negacyclicity : bool) -> LUT{
+    pub fn from_lwe(lwe : &LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context, negacyclicity : bool) -> LUT{
 
         let redundant_lwe = Self::add_redundancy(lwe, public_key, ctx, negacyclicity);
         let mut container : Vec<u64> = Vec::new();
@@ -608,6 +642,23 @@ impl LUT {
         many_lwe
     }
 
+    pub fn to_many_lut(self, public_key : &PublicKey,  ctx: &Context) -> Vec<LUT> {
+        let many_lwe = self.to_many_lwe(public_key, ctx);
+    
+        // Many-Lwe to Many-Glwe
+        let mut many_glwe : Vec<LUT> = Vec::new();
+        for lwe in many_lwe{
+            let mut glwe = GlweCiphertext::new(0_u64,ctx.glwe_dimension().to_glwe_size(),ctx.polynomial_size());
+            let redundancy_lwe = public_key.one_lwe_to_lwe_ciphertext_list(lwe, ctx);
+            private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(
+                &public_key.pfpksk,
+                &mut glwe,
+                &redundancy_lwe);
+            many_glwe.push(LUT(glwe));
+        }
+        many_glwe
+    }
+
 
 
     pub fn add_lut(
@@ -643,8 +694,6 @@ pub struct LUTStack{
 
 impl LUTStack{
 
-
-    // pub fn get_number_of_element(&self) -> LweCiphertext<Vec<u64>>{self.number_of_elements}
 
 
     pub fn new(ctx : &Context) -> LUTStack{
@@ -720,13 +769,9 @@ impl LUTStack{
                 MonomialDegree(i*ctx.box_size() as usize));
             let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
             keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
-            
 
-            private_key.debug_lwe("switched = ", &switched, &ctx);
             let cp = public_key.eq_scalar(&switched, 0, &ctx);
-            // private_key.debug_lwe("switched == 0 : ", &cp, &ctx);
-            // let cp = public_key.eq_scalar(&switched, 0, &ctx);
-            private_key.debug_lwe("switched == 0 : ", &cp, &ctx);
+
             lwe_ciphertext_sub_assign(&mut number_of_elements, &cp);
 
         }
@@ -790,6 +835,20 @@ mod test{
     }
 
     #[test]
+    fn test_neg_lwe_assign(){
+        let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
+        let private_key = PrivateKey::new(&mut ctx);
+        let public_key = &private_key.public_key;
+        let input : u64 = 3;
+        let mut lwe = private_key.allocate_and_encrypt_lwe(input, &mut ctx);
+        let neg_lwe = public_key.neg_lwe(&mut lwe, &ctx);
+        let clear = private_key.decrypt_lwe(&neg_lwe, &mut ctx);
+        println!("Test encryption-decryption");
+        println!("neg_lwe = {}", clear);
+        // assert_eq!(input,16-clear);
+    }
+
+    #[test]
     fn test_many_lwe_to_glwe(){
         let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
         let private_key = PrivateKey::new(&mut ctx);
@@ -815,7 +874,7 @@ mod test{
         let public_key = &private_key.public_key;
         let our_input = 8u64;
         let lwe = private_key.allocate_and_encrypt_lwe(our_input, &mut ctx);
-        let lut = LUT::from_lwe(lwe, public_key, &ctx, false);
+        let lut = LUT::from_lwe(&lwe, public_key, &ctx, false);
         let output_pt =  private_key.decrypt_and_decode_glwe(&lut.0, &ctx);
         println!("Test LWE to LUT");
         println!("{:?}", output_pt);
