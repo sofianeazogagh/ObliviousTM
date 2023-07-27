@@ -1,7 +1,8 @@
-use tfhe::{core_crypto::prelude::*, shortint::server_key::Accumulator};
+use tfhe::{core_crypto::prelude::*};
 use tfhe::shortint::prelude::*;
+use tfhe::shortint::prelude::CiphertextModulus;
 use std::time::{Instant, Duration};
-
+use crate::headers::{Context, LUT, PrivateKey};
 
 
 pub fn generate_accumulator<F>(
@@ -18,7 +19,7 @@ pub fn generate_accumulator<F>(
         // box, which manages redundancy to yield a denoised value for several noisy values around
         // a true input value.
         let box_size = polynomial_size.0 / message_modulus;
-
+        let ciphertext_modulus = CiphertextModulus::new_native();
         // Create the accumulator
         let mut accumulator_u64 = vec![0_u64; polynomial_size.0];
 
@@ -43,7 +44,7 @@ pub fn generate_accumulator<F>(
         let accumulator_plaintext = PlaintextList::from_container(accumulator_u64);
 
         let accumulator =
-            allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext);
+            allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext,ciphertext_modulus,);
 
         accumulator
         
@@ -68,8 +69,8 @@ pub fn generate_accumulator_via_vector_of_ciphertext(
 
     // Create the accumulator
     let mut output_vec : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-
-    let ct_0 = LweCiphertext::new(0_64, lwe_dimension.to_lwe_size());
+    let ciphertext_modulus = CiphertextModulus::new_native();
+    let ct_0 = LweCiphertext::new(0_64, lwe_dimension.to_lwe_size(),ciphertext_modulus,);
 
     // Fill each box with the encoded denoised value
     for i in 0..message_modulus { //many_lwe.len()
@@ -101,9 +102,9 @@ pub fn encrypt_accumulator_as_glwe_ciphertext(
     accumulator_u64: Vec<u64>,
 ) ->GlweCiphertext<Vec<u64>>
     where
-{
+{   let ciphertext_modulus = CiphertextModulus::new_native();
     let accumulator_plaintext = PlaintextList::from_container(accumulator_u64);
-    let mut accumulator = GlweCiphertext::new(0, glwe_size, polynomial_size);
+    let mut accumulator = GlweCiphertext::new(0, glwe_size, polynomial_size,ciphertext_modulus,);
     encrypt_glwe_ciphertext(
         glwe_secret_key,
         &mut accumulator,
@@ -113,7 +114,6 @@ pub fn encrypt_accumulator_as_glwe_ciphertext(
     );
     accumulator
 }
-
 
 // Here we will define a helper function to generate an accumulator for a PBS
 pub fn generate_accumulator_via_vector(
@@ -169,7 +169,7 @@ pub fn generate_accumulator_bivariate<F>(
     // box, which manages redundancy to yield a denoised value for several noisy values around
     // a true input value.
     let box_size = polynomial_size.0 / message_modulus;
-
+    let ciphertext_modulus = CiphertextModulus::new_native();
     let wrapped_f = |input: u64| -> u64 {
         let lhs = (input / message_modulus as u64) % message_modulus as u64;
         let rhs = input % message_modulus as u64;
@@ -201,7 +201,7 @@ pub fn generate_accumulator_bivariate<F>(
     let accumulator_plaintext = PlaintextList::from_container(accumulator_u64);
 
     let accumulator =
-        allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext);
+        allocate_and_trivially_encrypt_new_glwe_ciphertext(glwe_size, &accumulator_plaintext,ciphertext_modulus,);
 
     accumulator
 }
@@ -214,9 +214,9 @@ pub fn scalar_greater(
     fourier_bsk: FourierLweBootstrapKey<aligned_vec::ABox<[num_complex::Complex<f64>]>>
 ) -> LweCiphertext<Vec<u64>> 
 {
-
+    let ciphertext_modulus = CiphertextModulus::new_native();
     let mut res_cmp =
-        LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size()
+        LweCiphertext::new(0u64, big_lwe_dimension.to_lwe_size(),ciphertext_modulus,
         );
     println!("Computing PBS...");
     programmable_bootstrap_lwe_ciphertext(
@@ -242,7 +242,7 @@ pub fn greater_or_equal(
 ) 
 // -> LweCiphertext<Vec<u64>> 
 {
-
+    let ciphertext_modulus = CiphertextModulus::new_native();
     // Decrypt the PBS multiplication result
     let res_pt: Plaintext<u64> =
         decrypt_lwe_ciphertext(&lwe_sk, &ct_left);
@@ -278,4 +278,39 @@ pub fn greater_or_equal(
     //     &fourier_bsk,
     // );
     // res_cmp
+}
+
+
+pub fn encrypt_vec_of_LUT(array_2d:Vec<Vec<u64>>,
+                          ctx:&mut Context,
+                          private_key:&PrivateKey)
+                          ->Vec<LUT>
+where
+{
+    let mut vec_of_lut: Vec<LUT> = Vec::new();
+
+    for f in array_2d {
+
+        let lut = LUT::from_vec(&f, &private_key, ctx);
+        vec_of_lut.push(lut);
+
+    }
+
+    return vec_of_lut
+}
+
+pub fn negacycle_vector(array_2d:Vec<Vec<u64>>,
+                        ctx:&mut Context, ) ->Vec<Vec<u64>>
+    where
+{
+    let mut result: Vec<Vec<u64>> = Vec::new();
+    for f in array_2d {
+        let mut list = Vec::new() as Vec<u64>;
+        for i in 0..f.len(){
+            list.push((ctx.full_message_modulus() as u64 - f[i] as u64) % ctx.full_message_modulus() as u64);
+        }
+        result.push(list);
+    }
+    println!("{:?}",result);
+    return result
 }
