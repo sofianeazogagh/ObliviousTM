@@ -3,6 +3,7 @@ mod unitest_baacc2d;
 mod key_generation;
 mod encrypt_instructions;
 mod test_glwe;
+mod headers;
 
 use aligned_vec::ABox;
 use num_complex::Complex;
