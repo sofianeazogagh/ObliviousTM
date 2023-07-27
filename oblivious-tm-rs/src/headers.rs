@@ -5,23 +5,29 @@ use num_complex::Complex;
 use tfhe::boolean::public_key;
 use tfhe::{core_crypto::prelude::*};
 use tfhe::shortint::{prelude::*};
-
-
+use tfhe::shortint::{prelude::CiphertextModulus};
+use tfhe::shortint::parameters::ClassicPBSParameters;
 
 pub struct Context{
-    parameters : Parameters,
+    parameters : ClassicPBSParameters,
     big_lwe_dimension : LweDimension,
     delta : u64,
     full_message_modulus : usize,
     signed_decomposer : SignedDecomposer<u64>,
     encryption_generator : EncryptionRandomGenerator<ActivatedRandomGenerator>,
     secret_generator : SecretRandomGenerator<ActivatedRandomGenerator>,
-    box_size : usize
+    box_size : usize,
+    ciphertext_modulus:CiphertextModulus,
 }
 
 impl Context {
+<<<<<<< Updated upstream
     pub fn from(parameters : Parameters) -> Context {
         let big_lwe_dimension = LweDimension(parameters.glwe_dimension.0 * parameters.polynomial_size.0);
+=======
+    pub fn from(parameters : ClassicPBSParameters) -> Context {
+        let big_lwe_dimension = LweDimension(parameters.polynomial_size.0*parameters.glwe_dimension.0);
+>>>>>>> Stashed changes
         let full_message_modulus = parameters.message_modulus.0 * parameters.carry_modulus.0;
         let delta = (1u64 << 63 ) / (full_message_modulus) as u64;
         
@@ -43,7 +49,7 @@ impl Context {
             EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
         
         let box_size = parameters.polynomial_size.0 / full_message_modulus as usize;
-
+        let ciphertext_modulus = CiphertextModulus::new_native();
 
         Context{
             parameters,
@@ -53,7 +59,8 @@ impl Context {
             signed_decomposer,
             secret_generator,
             encryption_generator,
-            box_size
+            box_size,
+            ciphertext_modulus
 
         }
     }
@@ -69,14 +76,17 @@ impl Context {
     pub fn pbs_level(&self) -> DecompositionLevelCount {self.parameters.pbs_level}
     pub fn ks_level(&self) -> DecompositionLevelCount {self.parameters.ks_level}
     pub fn ks_base_log(&self) -> DecompositionBaseLog {self.parameters.ks_base_log}
-    pub fn pfks_level(&self) -> DecompositionLevelCount {self.parameters.pfks_level}
-    pub fn pfks_base_log(&self) -> DecompositionBaseLog {self.parameters.pfks_base_log}
-    pub fn pfks_modular_std_dev(&self) -> StandardDev {self.parameters.pfks_modular_std_dev}
+    pub fn pfks_level(&self) -> DecompositionLevelCount {self.parameters.pbs_level}
+    pub fn pfks_base_log(&self) -> DecompositionBaseLog {self.parameters.pbs_base_log}
+    pub fn pfks_modular_std_dev(&self) -> StandardDev {self.parameters.glwe_modular_std_dev}
     pub fn message_modulus(&self) -> MessageModulus {self.parameters.message_modulus}
     pub fn carry_modulus(&self) -> CarryModulus {self.parameters.carry_modulus}
     pub fn delta(&self) -> u64 {self.delta}
     pub fn full_message_modulus(&self) -> usize {self.full_message_modulus}
     pub fn box_size(&self) -> usize {self.box_size}
+    pub fn ciphertext_modulus(&self) -> CiphertextModulus {self.ciphertext_modulus}
+    pub fn cbs_level(&self) -> DecompositionLevelCount {self.parameters.ks_level}
+    pub fn cbs_base_log(&self) -> DecompositionBaseLog {self.parameters.ks_base_log}
     // pub fn signed_decomposer(&self) -> SignedDecomposer<u64> {self.signed_decomposer}
 
 }
@@ -101,16 +111,16 @@ impl PrivateKey{
     /// ```
     ///
     pub fn new(ctx: &mut Context) -> PrivateKey {
-        
-    
+
+
         // Generate an LweSecretKey with binary coefficients
         let small_lwe_sk =
             LweSecretKey::generate_new_binary(ctx.small_lwe_dimension(), &mut ctx.secret_generator);
-    
+
         // Generate a GlweSecretKey with binary coefficients
         let glwe_sk =
             GlweSecretKey::generate_new_binary(ctx.glwe_dimension(), ctx.polynomial_size(), &mut ctx.secret_generator);
-    
+
         // Create a copy of the GlweSecretKey re-interpreted as an LweSecretKey
         let big_lwe_sk = glwe_sk.clone().into_lwe_secret_key();
     
@@ -121,9 +131,9 @@ impl PrivateKey{
             ctx.pbs_base_log(),
             ctx.pbs_level(),
             ctx.glwe_modular_std_dev(),
+            ctx.ciphertext_modulus(),
             &mut ctx.encryption_generator,
         );
-
 
         // Create the empty bootstrapping key in the Fourier domain
         let mut fourier_bsk = FourierLweBootstrapKey::new(
@@ -133,12 +143,13 @@ impl PrivateKey{
             std_bootstrapping_key.decomposition_base_log(),
             std_bootstrapping_key.decomposition_level_count(),
         );
-    
+
         // Use the conversion function (a memory optimized version also exists but is more complicated
         // to use) to convert the standard bootstrapping key to the Fourier domain
         convert_standard_lwe_bootstrap_key_to_fourier(&std_bootstrapping_key, &mut fourier_bsk);
         // We don't need the standard bootstrapping key anymore
         drop(std_bootstrapping_key);
+
     
     
         let mut lwe_ksk = LweKeyswitchKey::new(
@@ -147,7 +158,9 @@ impl PrivateKey{
             ctx.ks_level(),
             ctx.big_lwe_dimension(),
             ctx.small_lwe_dimension(),
+            ctx.ciphertext_modulus()
         );
+
         generate_lwe_keyswitch_key(
             &big_lwe_sk,
             &small_lwe_sk,
@@ -155,7 +168,8 @@ impl PrivateKey{
             ctx.lwe_modular_std_dev(),
             &mut ctx.encryption_generator,
         );
-    
+
+
         // Create Packing Key Switch
     
         let mut pfpksk = LwePrivateFunctionalPackingKeyswitchKey::new(
@@ -165,6 +179,7 @@ impl PrivateKey{
             ctx.small_lwe_dimension(),
             ctx.glwe_dimension().to_glwe_size(),
             ctx.polynomial_size(),
+            ctx.ciphertext_modulus()
         );
 
         // Here there is some freedom for the choice of the last polynomial from algorithm 2
@@ -183,11 +198,22 @@ impl PrivateKey{
             &last_polynomial,
         );
 
+        let cbs_pfpksk = par_allocate_and_generate_new_circuit_bootstrap_lwe_pfpksk_list(
+            &big_lwe_sk,
+            &glwe_sk,
+            ctx.pfks_base_log(),
+            ctx.pfks_level(),
+            ctx.pfks_modular_std_dev(),
+            ctx.ciphertext_modulus(),
+            &mut ctx.encryption_generator,
+        );
+
 
         let public_key = PublicKey{
             lwe_ksk,
             fourier_bsk,
-            pfpksk
+            pfpksk,
+            cbs_pfpksk,
         };
 
         PrivateKey{
@@ -213,6 +239,8 @@ impl PrivateKey{
     // pub pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>
 
 
+
+
     pub fn allocate_and_encrypt_lwe(&self, input : u64, ctx: &mut Context ) -> LweCiphertext<Vec<u64>> {
 
         let plaintext = Plaintext(ctx.delta().wrapping_mul(input));
@@ -222,9 +250,26 @@ impl PrivateKey{
         &self.small_lwe_sk,
         plaintext,
         ctx.lwe_modular_std_dev(),
+        ctx.ciphertext_modulus(),
         &mut ctx.encryption_generator,
     );
     lwe_ciphertext
+    }
+
+    pub fn allocate_and_encrypt_lwe_big_key(&self, input : u64, ctx: &mut Context ) -> LweCiphertext<Vec<u64>> {
+
+        let plaintext = Plaintext(ctx.delta().wrapping_mul(input));
+
+        // Allocate a new LweCiphertext and encrypt our plaintext
+        let lwe_ciphertext: LweCiphertextOwned<u64> = allocate_and_encrypt_new_lwe_ciphertext(
+            &self.big_lwe_sk,
+            plaintext,
+            ctx.lwe_modular_std_dev(),
+            ctx.ciphertext_modulus(),
+            &mut ctx.encryption_generator,
+        );
+        lwe_ciphertext
+
     }
 
     pub fn allocate_and_trivially_encrypt_lwe(&self, input : u64, ctx: &mut Context) -> LweCiphertext<Vec<u64>>{
@@ -232,7 +277,8 @@ impl PrivateKey{
         // Allocate a new LweCiphertext and encrypt trivially our plaintext
         let lwe_ciphertext: LweCiphertextOwned<u64> = allocate_and_trivially_encrypt_new_lwe_ciphertext(
             ctx.small_lwe_dimension().to_lwe_size(),
-            plaintext
+            plaintext,
+            ctx.ciphertext_modulus()
         );
         lwe_ciphertext
     }
@@ -242,27 +288,29 @@ impl PrivateKey{
         let plaintext: Plaintext<u64> =
         decrypt_lwe_ciphertext(&self.small_lwe_sk, &ciphertext);
         let result: u64 =
-        ctx.signed_decomposer.closest_representable(plaintext.0) / ctx.delta();
+        ctx.signed_decomposer.closest_representable(plaintext.0) / ctx.delta() % ctx.full_message_modulus() as u64;
         result
     }
 
-    pub fn decrypt_lwe_big_key(&self, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &mut Context) -> u64 {
+    pub fn decrypt_lwe_big_key(&self, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &Context) -> u64 {
         // Decrypt the PBS multiplication result
         let plaintext: Plaintext<u64> =
         decrypt_lwe_ciphertext(&self.big_lwe_sk, &ciphertext);
         let result: u64 =
-        ctx.signed_decomposer.closest_representable(plaintext.0) / ctx.delta();
+        ctx.signed_decomposer.closest_representable(plaintext.0) / ctx.delta() % ctx.full_message_modulus() as u64;
         result
     }
 
     pub fn allocate_and_encrypt_glwe(&self, pt_list : PlaintextList<Vec<u64>>, ctx: &mut Context) -> GlweCiphertext<Vec<u64>> {
-        let mut output_glwe = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size());
+        let mut output_glwe = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(),ctx.ciphertext_modulus()
+        );
         encrypt_glwe_ciphertext(
             self.get_glwe_sk(),
             &mut output_glwe,
             &pt_list,
             ctx.glwe_modular_std_dev(),
             &mut ctx.encryption_generator,
+
         );
         output_glwe
     }
@@ -277,7 +325,7 @@ impl PrivateKey{
         );
     }
 
-    pub fn decrypt_and_decode_glwe(&self, input_glwe : &GlweCiphertext<Vec<u64>>, ctx: &Context ) -> Vec<u64>{
+    pub fn decrypt_and_decode_glwe_as_neg(&self, input_glwe : &GlweCiphertext<Vec<u64>>, ctx: &Context ) -> Vec<u64>{
         let mut plaintext_res = PlaintextList::new(0, PlaintextCount(ctx.polynomial_size().0));
         decrypt_glwe_ciphertext(&self.get_glwe_sk(), &input_glwe, &mut plaintext_res);
     
@@ -291,6 +339,28 @@ impl PrivateKey{
 
         decoded
         
+    }
+
+    pub fn decrypt_and_decode_glwe(&self, input_glwe : &GlweCiphertext<Vec<u64>>, ctx: &Context ) -> Vec<u64>{
+        let mut plaintext_res = PlaintextList::new(0, PlaintextCount(ctx.polynomial_size().0));
+        decrypt_glwe_ciphertext(&self.get_glwe_sk(), &input_glwe, &mut plaintext_res);
+
+        // To round our 4 bits of message
+        // In the paper we return the complicated sum times -1, so here we invert that -1, otherwise we
+        // could apply the wrapping_neg on our function and remove it here
+        let decoded: Vec<_> = plaintext_res
+            .iter()
+            .map(|x| (ctx.signed_decomposer.closest_representable(*x.0) / ctx.delta()) % ctx.full_message_modulus() as u64)
+            .collect();
+
+        decoded
+
+    }
+
+    pub fn decrypt_ggsw_as_lwe(&self, input_ggsw : &GgswCiphertext<Vec<u64>>, ctx: &Context, private_key: &PrivateKey) -> u64{
+
+        let plain = decrypt_constant_ggsw_ciphertext(&private_key.get_glwe_sk(), &input_ggsw);
+        plain.0
     }
 
     pub fn debug_lwe(&self, string : &str, ciphertext : &LweCiphertext<Vec<u64>>, ctx: &Context){
@@ -319,21 +389,14 @@ impl PrivateKey{
         
     }
 
-
-
-
-
-  
 }
-
-
-
 
 
 pub struct PublicKey { // utilKey ou ServerKey ou CloudKey
     pub lwe_ksk: LweKeyswitchKey<Vec<u64>>,
     pub fourier_bsk: FourierLweBootstrapKey<ABox<[Complex<f64>]>>,
-    pub pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>
+    pub pfpksk: LwePrivateFunctionalPackingKeyswitchKey<Vec<u64>>,
+    pub cbs_pfpksk:LwePrivateFunctionalPackingKeyswitchKeyListOwned<u64>,
 }
 
 
@@ -363,7 +426,8 @@ impl PublicKey{
         // Allocate a new LweCiphertext and encrypt trivially our plaintext
         let lwe_ciphertext: LweCiphertextOwned<u64> = allocate_and_trivially_encrypt_new_lwe_ciphertext(
             ctx.small_lwe_dimension().to_lwe_size(),
-            plaintext
+            plaintext,
+            ctx.ciphertext_modulus()
         );
         lwe_ciphertext
     }
@@ -376,14 +440,15 @@ impl PublicKey{
     {
     
         let cmp_scalar_accumulator = LUT::from_function(|x| (x <= scalar as u64) as u64, ctx);
-        let mut res_cmp = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size());
+        let mut res_cmp = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
         programmable_bootstrap_lwe_ciphertext(
             &ct_input,
             &mut res_cmp,
             &cmp_scalar_accumulator.0,
             &self.fourier_bsk,
         );
-        let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+        let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus()
+        );
         keyswitch_lwe_ciphertext(&self.lwe_ksk, &mut res_cmp, &mut switched);
     
         switched
@@ -397,14 +462,14 @@ impl PublicKey{
     {
     
         let eq_scalar_accumulator = LUT::from_function(|x| ( x == scalar as u64) as u64, ctx);
-        let mut res_eq = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size());
+        let mut res_eq = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
         programmable_bootstrap_lwe_ciphertext(
             &ct_input,
             &mut res_eq,
             &eq_scalar_accumulator.0,
             &self.fourier_bsk,
         );
-        let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+        let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
         keyswitch_lwe_ciphertext(&self.lwe_ksk, &mut res_eq, &mut switched);
     
         switched
@@ -432,7 +497,52 @@ impl PublicKey{
 
 }
 
-
+// pub fn public_key_from_sks(sks: ServerKey, ctx: &mut Context) ->PublicKey{
+//     let mut pfpksk = LwePrivateFunctionalPackingKeyswitchKey::new(
+//         0,
+//         ctx.pfks_base_log(),
+//         ctx.pfks_level(),
+//         ctx.small_lwe_dimension(),
+//         ctx.glwe_dimension().to_glwe_size(),
+//         ctx.polynomial_size(),
+//         ctx.ciphertext_modulus()
+//     );
+//
+//     // Here there is some freedom for the choice of the last polynomial from algorithm 2
+//     // By convention from the paper the polynomial we use here is the constant -1
+//     let mut last_polynomial = Polynomial::new(0, ctx.polynomial_size());
+//     // Set the constant term to u64::MAX == -1i64
+//     last_polynomial[0] = u64::MAX;
+//     // Generate the LWE private functional packing keyswitch key
+//     par_generate_lwe_private_functional_packing_keyswitch_key(
+//         &small_lwe_sk,
+//         &glwe_sk,
+//         &mut pfpksk,
+//         ctx.pfks_modular_std_dev(),
+//         &mut ctx.encryption_generator,
+//         |x| x,
+//         &last_polynomial,
+//     );
+//
+//     let cbs_pfpksk = par_allocate_and_generate_new_circuit_bootstrap_lwe_pfpksk_list(
+//         &big_lwe_sk,
+//         &glwe_sk,
+//         ctx.pfks_base_log(),
+//         ctx.pfks_level(),
+//         ctx.pfks_modular_std_dev(),
+//         ctx.ciphertext_modulus(),
+//         &mut ctx.encryption_generator,
+//     );
+//
+//     let public_key : PublicKey=PublicKey{
+//         lwe_ksk: sks.key_switching_key,
+//         fourier_bsk: sks.bootstrapping_key,
+//         pfpksk: pfpksk,
+//         cbs_pfpksk: cbs_pfpksk,
+//     };
+//     public_key
+//
+// }
 
 pub struct LUT(pub(crate) GlweCiphertext<Vec<u64>>);
 
@@ -442,7 +552,7 @@ impl LUT {
 
 
     pub fn new(ctx : &Context) -> LUT{
-        let new_lut = GlweCiphertext::new(0_64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size());
+        let new_lut = GlweCiphertext::new(0_64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(),ctx.ciphertext_modulus());
         LUT(new_lut)
     }
 
@@ -482,7 +592,7 @@ impl LUT {
         let box_size = ctx.box_size();
         // Create the vector which will contain the redundant lwe
         let mut redundant_many_lwe : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-        let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size());
+        let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
 
         let size_many_lwe = many_lwe.len();
         // Fill each box with the encoded denoised value
@@ -512,10 +622,14 @@ impl LUT {
     
 
         if negacyclicity {
+<<<<<<< Updated upstream
 
 
 
             let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size());
+=======
+            let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+>>>>>>> Stashed changes
             let half_box_size = box_size / 2;
             // Negate the first half_box_size coefficients to manage negacyclicity and rotate
             for lwe_i in redundant_lwe[0..half_box_size].iter_mut() {
@@ -561,7 +675,7 @@ impl LUT {
         let accumulator_plaintext = PlaintextList::from_container(accumulator_u64);
 
         let accumulator =
-            allocate_and_trivially_encrypt_new_glwe_ciphertext(ctx.glwe_dimension().to_glwe_size(), &accumulator_plaintext);
+            allocate_and_trivially_encrypt_new_glwe_ciphertext(ctx.glwe_dimension().to_glwe_size(), &accumulator_plaintext,ctx.ciphertext_modulus());
 
         LUT(accumulator)
     }
@@ -569,7 +683,7 @@ impl LUT {
 
     pub fn from_vec(vec : &Vec<u64>, private_key : &PrivateKey, ctx : &mut Context) -> LUT {
 
-        let mut lut_as_glwe = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size() , ctx.polynomial_size());
+        let mut lut_as_glwe = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size() , ctx.polynomial_size(),ctx.ciphertext_modulus());
         let redundant_lut = Self::add_redundancy_many_u64(vec, ctx);
         let accumulator_plaintext = PlaintextList::from_container(redundant_lut);
         private_key.encrypt_glwe(&mut lut_as_glwe, accumulator_plaintext, ctx);
@@ -587,10 +701,10 @@ impl LUT {
         let mut lwe = ct.into_container();
         lwe_container.append(&mut lwe);
     }
-    let lwe_ciphertext_list =  LweCiphertextList::from_container(lwe_container,ctx.small_lwe_dimension().to_lwe_size());
+    let lwe_ciphertext_list =  LweCiphertextList::from_container(lwe_container,ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
 
     // Prepare our output GLWE in which we pack our LWEs
-    let mut glwe = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size());
+    let mut glwe = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(),ctx.ciphertext_modulus());
     
     // Keyswitch and pack
     private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(
@@ -611,9 +725,9 @@ impl LUT {
             let mut lwe = ct.into_container();
             container.append(&mut lwe);
         }
-        let lwe_ciphertext_list = LweCiphertextList::from_container(container,ctx.small_lwe_dimension().to_lwe_size());
+        let lwe_ciphertext_list = LweCiphertextList::from_container(container,ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
         // Prepare our output GLWE 
-        let mut glwe = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size());
+        let mut glwe = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(),ctx.ciphertext_modulus());
         // Keyswitch and pack
         private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(
             &public_key.pfpksk,
@@ -629,12 +743,12 @@ impl LUT {
         
         for i in 0..ctx.full_message_modulus(){
 
-            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
             extract_lwe_sample_from_glwe_ciphertext(
                 &self.0,
                 &mut lwe_sample,
                 MonomialDegree(i*ctx.box_size() as usize));
-            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
             keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
             
             many_lwe.push(switched);
@@ -667,7 +781,8 @@ impl LUT {
     )
     -> GlweCiphertext<Vec<u64>>
     {
-        let mut res = GlweCiphertext::new(0_u64, self.0.glwe_size(), self.0.polynomial_size());
+        let ciphertext_modulus = CiphertextModulus::new_native();
+        let mut res = GlweCiphertext::new(0_u64, self.0.glwe_size(), self.0.polynomial_size(),ciphertext_modulus);
     
         res.as_mut().iter_mut()
         .zip(
@@ -697,8 +812,8 @@ impl LUTStack{
 
 
     pub fn new(ctx : &Context) -> LUTStack{
-        let lut = LUT(GlweCiphertext::new(0_64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size()));
-        let number_of_elements = LweCiphertext::new(0_u64,ctx.small_lwe_dimension().to_lwe_size());
+        let lut = LUT(GlweCiphertext::new(0_64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(),ctx.ciphertext_modulus()));
+        let number_of_elements = LweCiphertext::new(0_u64,ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
         LUTStack{
             lut,
             number_of_elements
@@ -743,7 +858,7 @@ impl LUTStack{
         
 
         let stack_len = private_key.allocate_and_trivially_encrypt_lwe((vec.len())  as u64, ctx);
-        let mut lut_as_glwe = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size() , ctx.polynomial_size());
+        let mut lut_as_glwe = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size() , ctx.polynomial_size(),ctx.ciphertext_modulus());
         let redundant_lut = Self::add_redundancy_many_u64(vec, ctx);
         let accumulator_plaintext = PlaintextList::from_container(redundant_lut);
         private_key.encrypt_glwe(&mut lut_as_glwe, accumulator_plaintext, ctx);
@@ -762,12 +877,12 @@ impl LUTStack{
 
         for i in (0..ctx.full_message_modulus()).rev(){
 
-            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size());
+            let mut lwe_sample = LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
             extract_lwe_sample_from_glwe_ciphertext(
                 &lut.0,
                 &mut lwe_sample,
                 MonomialDegree(i*ctx.box_size() as usize));
-            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size());
+            let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
             keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut lwe_sample, &mut switched);
 
             let cp = public_key.eq_scalar(&switched, 0, &ctx);
