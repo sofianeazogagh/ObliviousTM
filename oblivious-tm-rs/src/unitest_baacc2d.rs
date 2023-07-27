@@ -133,7 +133,7 @@ pub fn blind_array_access2d() {
 
     let start_bacc2d = Instant::now();
 
-    let ct_res = bacc2d_(
+    let ct_res = bacc2d(
         accumulators,
         lwe_ciphertext_1,
         lwe_ciphertext_final,
@@ -161,7 +161,7 @@ pub fn blind_array_access2d() {
 
 
 
-pub fn bacc2d_(
+pub fn bacc2d(
     accumulators: Vec<GlweCiphertext<Vec<u64>>>, 
     lwe_ciphertext_1: LweCiphertext<Vec<u64>>, 
     lwe_ciphertext_final: LweCiphertext<Vec<u64>>,
