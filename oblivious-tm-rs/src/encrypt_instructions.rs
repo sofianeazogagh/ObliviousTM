@@ -1,17 +1,13 @@
 use num_complex::Complex;
 use tfhe::core_crypto::prelude::*;
 use aligned_vec::{ABox};
-use tfhe::core_crypto::fft_impl::c64;
+use crate::headers::{Context, PrivateKey};
+use crate::helpers::{encrypt_accumulator_as_glwe_ciphertext, generate_accumulator_via_vector};
 use crate::unitest_baacc2d::*;
 
 pub fn encrypt_instructions(
-    glwe_key:&GlweSecretKeyOwned<u64>,
-    message_modulus:u64,
-    delta:u64,
-    glwe_modular_std_dev:StandardDev,
-    polynomial_size:PolynomialSize,
-    mut encryption_generator: &mut EncryptionRandomGenerator<ActivatedRandomGenerator>,
-    glwe_dimension:GlweDimension,
+    mut ctx: &mut Context,
+    private_key: &PrivateKey,
     instructions:Vec<Vec<u64>>)
     ->Vec<GlweCiphertext<Vec<u64>>>
 
@@ -20,16 +16,12 @@ pub fn encrypt_instructions(
 
     let mut accumulators: Vec<GlweCiphertextOwned<u64>> = Vec::new();
     for f in instructions.clone(){
-        let accumulator_u64 = generate_accumulator_via_vector(polynomial_size,  message_modulus as usize, delta,f.clone(),);
-        // Generate the accumulator for our multiplication by 2 using a simple closure
-        let accumulator: GlweCiphertextOwned<u64> = encrypt_accumulator_as_glwe_ciphertext(
-            &glwe_key,
-            glwe_modular_std_dev,
-            &mut encryption_generator,
-            polynomial_size,
-            glwe_dimension.to_glwe_size(),
-            accumulator_u64);
-        accumulators.push(accumulator);
+        let accumulator_u64 = generate_accumulator_via_vector(ctx.polynomial_size(),  ctx.message_modulus().0, ctx.delta(),f.clone(),);
+        let pt = PlaintextList::from_container(accumulator_u64);
+
+        let mut accumulator_glwe= GlweCiphertext::new(0,ctx.glwe_dimension().to_glwe_size(),ctx.polynomial_size(),ctx.ciphertext_modulus());
+        private_key.encrypt_glwe(&mut accumulator_glwe, pt, &mut ctx);
+        accumulators.push(accumulator_glwe);
     }
   return accumulators
 }

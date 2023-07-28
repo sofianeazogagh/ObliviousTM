@@ -6,10 +6,10 @@ use tfhe::boolean::public_key;
 use tfhe::{core_crypto::prelude::*};
 use tfhe::shortint::{prelude::*};
 use tfhe::shortint::{prelude::CiphertextModulus};
-use tfhe::shortint::parameters::ClassicPBSParameters;
+use tfhe::shortint::Parameters;
 
 pub struct Context{
-    parameters : ClassicPBSParameters,
+    parameters : Parameters,
     big_lwe_dimension : LweDimension,
     delta : u64,
     full_message_modulus : usize,
@@ -21,7 +21,7 @@ pub struct Context{
 }
 
 impl Context {
-        pub fn from(parameters: ClassicPBSParameters) -> Context {
+        pub fn from(parameters: Parameters) -> Context {
             let big_lwe_dimension = LweDimension(parameters.polynomial_size.0 * parameters.glwe_dimension.0);
             let full_message_modulus = parameters.message_modulus.0 * parameters.carry_modulus.0;
             let delta = (1u64 << 63) / (full_message_modulus) as u64;

@@ -311,6 +311,25 @@ pub fn negacycle_vector(array_2d:Vec<Vec<u64>>,
         }
         result.push(list);
     }
-    println!("{:?}",result);
     return result
+}
+
+pub fn one_lwe_to_lwe_ciphertext_list(lwe:&LweCiphertext<Vec<u64>>,ctx:&Context)->LweCiphertextList<Vec<u64>>{
+
+    let zero = LweCiphertext::new(0,ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus()) as LweCiphertext<Vec<u64>>;
+    let mut output = Vec::with_capacity(ctx.polynomial_size().0);
+    for i in 0..ctx.box_size(){
+        output.push(lwe.to_owned());
+    }
+
+
+    for i in ctx.box_size()..ctx.polynomial_size().0{
+        output.push(zero.to_owned());
+    }
+    output.rotate_left(ctx.box_size()/2);
+    let mut output_list = LweCiphertextList::new(0, ctx.small_lwe_dimension().to_lwe_size(),LweCiphertextCount(ctx.polynomial_size().0), ctx.ciphertext_modulus()) as LweCiphertextList<Vec<u64>>;
+    for (mut dst,src) in output_list.iter_mut().zip(output.iter()){
+        dst.as_mut().copy_from_slice(src.as_ref());
+    }
+    output_list
 }

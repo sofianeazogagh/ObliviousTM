@@ -6,13 +6,13 @@ use tfhe::core_crypto::prelude::*;
 
 
 
-pub fn _glwe_ciphertext_add(
+pub fn glwe_ciphertext_add(
     ct1 : GlweCiphertext<Vec<u64>>,
     ct2 : GlweCiphertext<Vec<u64>>,
 )
 -> GlweCiphertext<Vec<u64>>
 {
-    let mut res = GlweCiphertext::new(0_u64, ct1.glwe_size(), ct1.polynomial_size());
+    let mut res = GlweCiphertext::new(0_u64, ct1.glwe_size(), ct1.polynomial_size(),CiphertextModulus::new_native());
 
     res.as_mut().iter_mut()
     .zip(
@@ -28,7 +28,7 @@ pub fn _glwe_ciphertext_scalar_mul(
 )
 -> GlweCiphertext<Vec<u64>>
 {
-    let mut res = GlweCiphertext::new(0_u64, ct1.glwe_size(), ct1.polynomial_size());
+    let mut res = GlweCiphertext::new(0_u64, ct1.glwe_size(), ct1.polynomial_size(),CiphertextModulus::new_native());
     res.as_mut().iter_mut()
     .zip(
         ct1.as_ref().iter()
@@ -127,6 +127,7 @@ pub fn test_add()
         pbs_base_log,
         pbs_level,
         glwe_modular_std_dev,
+        CiphertextModulus::new_native(),
         &mut encryption_generator,
     );
 
@@ -166,6 +167,7 @@ pub fn test_add()
         &small_lwe_sk,
         plaintext_1,
         lwe_modular_std_dev,
+        CiphertextModulus::new_native(),
         &mut encryption_generator,
     );
 
@@ -194,9 +196,9 @@ pub fn test_add()
 
 
     let test_aubin1 = PlaintextList::new(1 * delta,PlaintextCount(polynomial_size.0));
-    let mut ct_test_aubin1 = GlweCiphertext::new(0_u64,glwe_dimension.to_glwe_size(),polynomial_size);
+    let mut ct_test_aubin1 = GlweCiphertext::new(0_u64,glwe_dimension.to_glwe_size(),polynomial_size,CiphertextModulus::new_native());
     let test_aubin2 = PlaintextList::new(2 * delta,PlaintextCount(polynomial_size.0));
-    let mut ct_test_aubin2 = GlweCiphertext::new(0_u64,glwe_dimension.to_glwe_size(),polynomial_size);
+    let mut ct_test_aubin2 = GlweCiphertext::new(0_u64,glwe_dimension.to_glwe_size(),polynomial_size,CiphertextModulus::new_native());
 
     encrypt_glwe_ciphertext(
         &glwe_sk,
@@ -214,7 +216,7 @@ pub fn test_add()
         &mut encryption_generator,
     );
 
-    let res_add_glwe = _glwe_ciphertext_add(ct_test_aubin1.clone(), ct_test_aubin2.clone());
+    let res_add_glwe = glwe_ciphertext_add(ct_test_aubin1.clone(), ct_test_aubin2.clone());
 
 
 
@@ -224,7 +226,7 @@ pub fn test_add()
 
     // let res_add_glwe = _glwe_ciphertext_add(accumulators[0].clone(), accumulators[1].clone());
     // let res_abs_glwe = _glwe_ciphertext_scalar_mul(accumulators[0].clone(), 3);
-    let mut pbs_res = LweCiphertext::new(0_u64, big_lwe_dimension.to_lwe_size());
+    let mut pbs_res = LweCiphertext::new(0_u64, big_lwe_dimension.to_lwe_size(),CiphertextModulus::new_native());
     // programmable_bootstrap_lwe_ciphertext(&lwe_ciphertext_1,&mut pbs_res , &res_add_glwe, &fourier_bsk);
     programmable_bootstrap_lwe_ciphertext(&lwe_ciphertext_1,&mut pbs_res , &res_add_glwe, &fourier_bsk);
 
