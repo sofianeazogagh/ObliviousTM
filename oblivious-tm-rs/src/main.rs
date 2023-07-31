@@ -14,7 +14,7 @@ use crate::test_glwe::glwe_ciphertext_add;
 use tfhe::core_crypto::algorithms::lwe_private_functional_packing_keyswitch::private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext;
 use tfhe::core_crypto::prelude::polynomial_algorithms::polynomial_wrapping_monic_monomial_mul_assign;
 use tfhe::shortint::parameters::PARAM_MESSAGE_3_CARRY_0;
-use crate::headers::{Context, PrivateKey, PublicKey};
+use crate::headers::{Context, LUT, PrivateKey, PublicKey};
 use crate::helpers::{generate_accumulator_via_vector, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
 
 
@@ -56,24 +56,24 @@ pub fn main() {
 
         println!("State Encrypted");
         let mut instruction_write = vec![
-            vec![0, 0, 7, 0, 7, 0, 0],
             vec![0, 0, 1, 0, 1, 0, 0],
-            vec![0, 0, 0, 0, 1, 0, 0],
+            vec![0, 0, 7, 0, 7, 0, 0],
+            vec![0, 0, 0, 0, 7, 0, 0],
         ];
 
         let mut instruction_position = vec![
-            vec![7, 1, 7, 7, 1, 1, 0],
-            vec![7, 1, 7, 7, 7, 1, 0],
-            vec![7, 7, 1, 7, 1, 1, 0],
+            vec![15, 15, 1, 1, 15, 15, 0],
+            vec![15, 15, 1, 1, 1, 15, 0],
+            vec![15, 1, 15, 1, 15, 15, 0],
         ];
 
         let mut instruction_state = vec![
             vec![0, 1, 2, 3, 0, 5, 6],
             vec![0, 1, 3, 3, 4, 5, 6],
-            vec![1, 2, 3, 4, 0, 6, 6],
+            vec![1, 2, 5, 4, 0, 6, 6],
         ];
         instruction_write = negacycle_vector(instruction_write, &mut ctx);
-        instruction_position = negacycle_vector(instruction_position, &mut ctx);
+        //instruction_position = negacycle_vector(instruction_position, &mut ctx);
         instruction_state = negacycle_vector(instruction_state, &mut ctx);
         println!("tape = {:?}",instruction_state);
 
@@ -95,9 +95,9 @@ pub fn main() {
             let current_cell = private_key.decrypt_lwe(&cellContent,&ctx);
             println!("cellContent = {}", current_cell);
 
-            tape = write_new_cell_content(&mut tape, cellContent.clone(), state.clone(), instruction_write.clone(), &public_key, &ctx, &private_key);
-            tape = change_head_position(&mut tape, cellContent.clone(), state.clone(), instruction_position.clone(), &public_key, &ctx, &private_key);
-            state = get_new_state(cellContent.clone(), state.clone(), instruction_state.clone(), &public_key, &ctx, &private_key);
+            tape = write_new_cell_content(&mut tape, cellContent.clone(), state.clone(),&instruction_write, &public_key, &ctx, &private_key);
+            tape = change_head_position(&mut tape, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
+            state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
 
         }
     }
@@ -120,14 +120,14 @@ pub fn main() {
         tape: &mut GlweCiphertext<Vec<u64>>,
         cellContent: LweCiphertext<Vec<u64>>,
         state: LweCiphertext<Vec<u64>>,
-        instruction_write: Vec<GlweCiphertext<Vec<u64>>>,
+        instruction_write: &Vec<LUT>,
         public_key: &PublicKey,
         ctx: &Context,
         private_key: &PrivateKey,
     ) -> GlweCiphertext<Vec<u64>>
     {
 
-        let newCellContent = bacc2d(
+        let newCellContent = bacc2dLUT(
             instruction_write,
             state,
             cellContent,
@@ -154,14 +154,14 @@ pub fn main() {
         tape: &mut GlweCiphertext<Vec<u64>>,
         cellContent: LweCiphertext<Vec<u64>>,
         state: LweCiphertext<Vec<u64>>,
-        instruction_position: Vec<GlweCiphertext<Vec<u64>>>,
+        instruction_position: &Vec<LUT>,
         public_key: &PublicKey,
         ctx: &Context,
         private_key: &PrivateKey,
 
     ) ->GlweCiphertext<Vec<u64>>
     {
-        let positionChange = bacc2d(
+        let positionChange = bacc2dLUT(
             instruction_position,
             state,
             cellContent,
@@ -176,7 +176,7 @@ pub fn main() {
         let mut res = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
         keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &positionChange, &mut res);
         blind_rotate_assign(&res, tape, &public_key.fourier_bsk);
-        tape.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
+        // tape.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
 
         return tape.to_owned();
 
@@ -186,13 +186,13 @@ pub fn main() {
     pub fn get_new_state(
         cellContent: LweCiphertext<Vec<u64>>,
         state: LweCiphertext<Vec<u64>>,
-        instruction_state: Vec<GlweCiphertext<Vec<u64>>>,
+        instruction_state: &Vec<LUT>,
         public_key: &PublicKey,
         ctx: &Context,
         private_key: &PrivateKey,
     ) -> LweCiphertext<Vec<u64>>
     {
-        let statesortie = bacc2d(
+        let statesortie = bacc2dLUT(
             instruction_state,
             state,
             cellContent,

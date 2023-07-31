@@ -13,9 +13,46 @@ use rayon::prelude::*;
 
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
-use crate::headers::{Context, PrivateKey, PublicKey};
+use crate::headers::{Context, LUT, PrivateKey, PublicKey};
 use crate::helpers::{encrypt_accumulator_as_glwe_ciphertext, generate_accumulator_via_vector, generate_accumulator_via_vector_of_ciphertext};
 
+
+pub fn bacc2dLUT(
+    array2d: &Vec<LUT>,
+    lwe_column: LweCiphertext<Vec<u64>>,
+    lwe_line: LweCiphertext<Vec<u64>>,
+    public_key : &PublicKey,
+    ctx : &Context,
+    private_key: &PrivateKey,
+
+)
+    -> LweCiphertext<Vec<u64>>
+{
+
+    let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    pbs_results.par_extend(
+        array2d
+            .into_par_iter()
+            .map(|acc| {
+                let mut pbs_ct = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+                programmable_bootstrap_lwe_ciphertext(
+                    &lwe_column,
+                    &mut pbs_ct,
+                    &acc.0,
+                    &public_key.fourier_bsk,
+                );
+                let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+                keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut pbs_ct, &mut switched);
+                switched
+            }),
+    );
+
+
+    let accumulator_final = LUT::from_vec_of_lwe(pbs_results, public_key, ctx);
+    let mut ct_res = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+    programmable_bootstrap_lwe_ciphertext(&lwe_line, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
+    ct_res
+}
 
 
 pub fn bacc2d(
@@ -30,7 +67,8 @@ pub fn bacc2d(
 ) -> LweCiphertext<Vec<u64>>
 where
  {
-    
+
+
     let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
 pbs_results.par_extend(
     accumulators

@@ -1,7 +1,7 @@
 use num_complex::Complex;
 use tfhe::core_crypto::prelude::*;
 use aligned_vec::{ABox};
-use crate::headers::{Context, PrivateKey};
+use crate::headers::{Context, LUT, PrivateKey};
 use crate::helpers::{encrypt_accumulator_as_glwe_ciphertext, generate_accumulator_via_vector};
 use crate::unitest_baacc2d::*;
 
@@ -9,19 +9,17 @@ pub fn encrypt_instructions(
     mut ctx: &mut Context,
     private_key: &PrivateKey,
     instructions:Vec<Vec<u64>>)
-    ->Vec<GlweCiphertext<Vec<u64>>>
+    ->Vec<LUT>
 
 {
 
 
-    let mut accumulators: Vec<GlweCiphertextOwned<u64>> = Vec::new();
+    let mut accumulators = Vec::new();
     for f in instructions.clone(){
-        let accumulator_u64 = generate_accumulator_via_vector(ctx.polynomial_size(),  ctx.message_modulus().0, ctx.delta(),f.clone(),);
-        let pt = PlaintextList::from_container(accumulator_u64);
+        let array = LUT::from_vec(&f,&private_key,&mut ctx);
 
-        let mut accumulator_glwe= GlweCiphertext::new(0,ctx.glwe_dimension().to_glwe_size(),ctx.polynomial_size(),ctx.ciphertext_modulus());
-        private_key.encrypt_glwe(&mut accumulator_glwe, pt, &mut ctx);
-        accumulators.push(accumulator_glwe);
+
+        accumulators.push(array);
     }
   return accumulators
 }
