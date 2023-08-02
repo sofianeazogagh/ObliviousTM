@@ -22,7 +22,7 @@ pub fn _glwe_ciphertext_add(
 }
 
 pub fn glwe_ciphertext_add(
-    ct1 : &GlweCiphertext<Vec<u64>>,
+    ct1 : GlweCiphertext<Vec<u64>>,
     ct2 : &GlweCiphertext<Vec<u64>>,
 )
     -> GlweCiphertext<Vec<u64>>

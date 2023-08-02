@@ -21,13 +21,9 @@ pub struct Context{
 }
 
 impl Context {
-<<<<<<< Updated upstream
-    pub fn from(parameters : Parameters) -> Context {
-        let big_lwe_dimension = LweDimension(parameters.glwe_dimension.0 * parameters.polynomial_size.0);
-=======
+
     pub fn from(parameters : ClassicPBSParameters) -> Context {
         let big_lwe_dimension = LweDimension(parameters.polynomial_size.0*parameters.glwe_dimension.0);
->>>>>>> Stashed changes
         let full_message_modulus = parameters.message_modulus.0 * parameters.carry_modulus.0;
         let delta = (1u64 << 63 ) / (full_message_modulus) as u64;
         
@@ -412,7 +408,7 @@ impl PublicKey{
 
     pub fn neg_lwe(&self, lwe : &LweCiphertext<Vec<u64>>, ctx : &Context) -> LweCiphertext<Vec<u64>>
     {
-        let mut neg_lwe = LweCiphertext::new(0_u64 , ctx.small_lwe_dimension().to_lwe_size());
+        let mut neg_lwe = LweCiphertext::new(0_u64 , ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus);
         neg_lwe.as_mut().iter_mut()
         .zip(
             lwe.as_ref().iter()
@@ -488,7 +484,8 @@ impl PublicKey{
         let redundant_lwe = vec![input_lwe.into_container();ctx.box_size()].concat();
         let lwe_ciphertext_list =  LweCiphertextList::from_container(
             redundant_lwe,
-            ctx.small_lwe_dimension().to_lwe_size());
+            ctx.small_lwe_dimension().to_lwe_size(),
+        ctx.ciphertext_modulus);
         
     
         lwe_ciphertext_list
@@ -622,14 +619,7 @@ impl LUT {
     
 
         if negacyclicity {
-<<<<<<< Updated upstream
-
-
-
-            let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size());
-=======
             let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
->>>>>>> Stashed changes
             let half_box_size = box_size / 2;
             // Negate the first half_box_size coefficients to manage negacyclicity and rotate
             for lwe_i in redundant_lwe[0..half_box_size].iter_mut() {
@@ -762,7 +752,7 @@ impl LUT {
         // Many-Lwe to Many-Glwe
         let mut many_glwe : Vec<LUT> = Vec::new();
         for lwe in many_lwe{
-            let mut glwe = GlweCiphertext::new(0_u64,ctx.glwe_dimension().to_glwe_size(),ctx.polynomial_size());
+            let mut glwe = GlweCiphertext::new(0_u64,ctx.glwe_dimension().to_glwe_size(),ctx.polynomial_size(),ctx.ciphertext_modulus());
             let redundancy_lwe = public_key.one_lwe_to_lwe_ciphertext_list(lwe, ctx);
             private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(
                 &public_key.pfpksk,

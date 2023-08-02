@@ -6,11 +6,8 @@ use rayon::prelude::*;
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
 
-#[path = "./headers.rs"] mod headers;
-use self::headers::PrivateKey;
-use self::headers::PublicKey;
-use self::headers::Context;
-use self::headers::LUT;
+use crate::headers::{Context, LUT, PrivateKey, PublicKey};
+
 
 
 
