@@ -2,7 +2,7 @@ use tfhe::{core_crypto::prelude::*};
 use tfhe::shortint::prelude::*;
 use tfhe::shortint::prelude::CiphertextModulus;
 use std::time::{Instant, Duration};
-use crate::headers::{Context, LUT, PrivateKey};
+use crate::headers::{Context, LUT, PrivateKey, PublicKey};
 
 
 pub fn generate_accumulator<F>(
@@ -332,4 +332,31 @@ pub fn one_lwe_to_lwe_ciphertext_list(lwe:&LweCiphertext<Vec<u64>>,ctx:&Context)
         dst.as_mut().copy_from_slice(src.as_ref());
     }
     output_list
+}
+
+pub fn create_monomial(position_0:&LweCiphertext<Vec<u64>>,position_1:&LweCiphertext<Vec<u64>>,public_key:&PublicKey,ctx:&Context)->GlweCiphertext<Vec<u64>> {
+    let mut position_last=LweCiphertext::new(1,ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus()) as LweCiphertext<Vec<u64>>;
+    lwe_ciphertext_sub_assign(&mut position_last,position_1);
+    lwe_ciphertext_sub_assign(&mut position_last,position_0);
+
+    let zero = LweCiphertext::new(0,ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus()) as LweCiphertext<Vec<u64>>;
+
+
+    let mut list = Vec::with_capacity(ctx.polynomial_size().0);
+    list.push(position_0.to_owned());
+    list.push(position_1.to_owned());
+    for i in 0..ctx.polynomial_size().0-3{
+        list.push(zero.to_owned());
+    }
+    list.push(position_last.to_owned());
+    let mut output_list = LweCiphertextList::new(0, ctx.small_lwe_dimension().to_lwe_size(),LweCiphertextCount(ctx.polynomial_size().0), ctx.ciphertext_modulus()) as LweCiphertextList<Vec<u64>>;
+    for (mut dst,src) in output_list.iter_mut().zip(list.iter()){
+        dst.as_mut().copy_from_slice(src.as_ref());
+    }
+
+    let mut output: GlweCiphertext<Vec<u64>> = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(), ctx.ciphertext_modulus());
+
+    private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(&public_key.pfpksk, &mut output, &output_list);
+    output
+
 }
