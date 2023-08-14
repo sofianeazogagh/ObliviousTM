@@ -17,11 +17,9 @@
   <component name="ChangeListManager">
     <list default="true" id="2144bdef-b464-4817-a4a1-e447794382c2" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/blind_array_access2d.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/blind_array_access2d.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/encrypt_instructions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/encrypt_instructions.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/headers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/headers.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/helpers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/helpers.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/test_glwe.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/test_glwe.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

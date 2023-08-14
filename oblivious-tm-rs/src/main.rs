@@ -162,8 +162,7 @@ pub fn write_new_cell_content(
 
     let mut newCellContentGlwe: GlweCiphertext<Vec<u64>> = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(), ctx.ciphertext_modulus());
     private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext(&public_key.pfpksk, &mut newCellContentGlwe,&switched);
-
-    let result = glwe_ciphertext_add(tape.to_owned(), &newCellContentGlwe,);
+    let result = glwe_ciphertext_add(tape.to_owned(), newCellContentGlwe,);
     return result;
 }
 
