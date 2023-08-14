@@ -3,6 +3,7 @@ mod encrypt_instructions;
 mod test_glwe;
 mod headers;
 mod helpers;
+mod blind_array_access_2d;
 
 use aligned_vec::ABox;
 use itertools::all;
@@ -14,8 +15,9 @@ use crate::test_glwe::glwe_ciphertext_add;
 use tfhe::core_crypto::algorithms::lwe_private_functional_packing_keyswitch::private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext;
 use tfhe::core_crypto::prelude::polynomial_algorithms::polynomial_wrapping_monic_monomial_mul_assign;
 use tfhe::shortint::parameters::PARAM_MESSAGE_3_CARRY_0;
+use crate::blind_array_access_2d::blind_array_access2d;
 use crate::headers::{Context, LUT, PrivateKey, PublicKey};
-use crate::helpers::{generate_accumulator_via_vector, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
+use crate::helpers::{bootstrap_glwe_LUT, generate_accumulator_via_vector, LWEaddu64, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
 
 
 pub fn main() {
@@ -44,6 +46,7 @@ pub fn main() {
             tape.push(2_u64);
         }
         println!("{:?}", tape);
+        blind_array_access2d();
 
         let accumulator_u64 = generate_accumulator_via_vector(ctx.polynomial_size(), ctx.message_modulus().0, ctx.delta(), tape);
         let pt = PlaintextList::from_container(accumulator_u64);
@@ -62,9 +65,9 @@ pub fn main() {
         ];
 
         let mut instruction_position = vec![
-            vec![15, 15, 1, 1, 15, 15, 0],
-            vec![15, 15, 1, 1, 1, 15, 0],
-            vec![15, 1, 15, 1, 15, 15, 0],
+            vec![1, 1, 15, 15, 1, 1, 0],
+            vec![1, 1, 15, 15, 15, 1, 0],
+            vec![1, 15, 1, 15, 1, 1, 0],
         ];
 
         let mut instruction_state = vec![
@@ -72,9 +75,40 @@ pub fn main() {
             vec![0, 1, 3, 3, 4, 5, 6],
             vec![1, 2, 5, 4, 0, 6, 6],
         ];
-        instruction_write = negacycle_vector(instruction_write, &mut ctx);
+
+        //instruction_write = negacycle_vector(instruction_write, &mut ctx);
         //instruction_position = negacycle_vector(instruction_position, &mut ctx);
-        instruction_state = negacycle_vector(instruction_state, &mut ctx);
+        //instruction_state = negacycle_vector(instruction_state, &mut ctx);
+
+    // let mut instruction_write = vec![
+    //     vec![0,0,0],
+    //     vec![0,0,0],
+    //     vec![7,1,0],
+    //     vec![0,0,0],
+    //     vec![7,1,1],
+    //     vec![0,0,0],
+    //     vec![0,0,0],
+    // ];
+    //
+    // let mut instruction_position = vec![
+    //     vec![7,7,7],
+    //     vec![7,7,1],
+    //     vec![1,1,7],
+    //     vec![1,1,1],
+    //     vec![7,1,7],
+    //     vec![7,7,7],
+    //     vec![0,0,0],
+    // ];
+    //
+    // let mut instruction_state = vec![
+    //     vec![0,0,7],
+    //     vec![7,7,6],
+    //     vec![6,5,3],
+    //     vec![5,5,4],
+    //     vec![0,4,0],
+    //     vec![3,3,2],
+    //     vec![2,2,2],
+    // ];
         println!("tape = {:?}",instruction_state);
 
 
@@ -109,10 +143,10 @@ pub fn main() {
         ctx: &Context) -> LweCiphertext<Vec<u64>> {
         let mut cellContent = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
         extract_lwe_sample_from_glwe_ciphertext(&tape, &mut cellContent, MonomialDegree(0));
-        let mut res = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
-        keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &cellContent, &mut res);
+        let mut res_temp = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
+        keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &cellContent, &mut res_temp);
 
-        return res;
+        return res_temp;
     }
 
 
@@ -176,11 +210,10 @@ pub fn main() {
         let mut res = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
         keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &positionChange, &mut res);
         blind_rotate_assign(&res, tape, &public_key.fourier_bsk);
-        // tape.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
+        //tape.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
 
-        return tape.to_owned();
-
-
+        //return bootstrap_glwe_LUT( tape,&public_key,&ctx);
+        return tape.to_owned()
     }
 
     pub fn get_new_state(
