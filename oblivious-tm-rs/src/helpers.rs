@@ -2,7 +2,12 @@ use tfhe::{core_crypto::prelude::*};
 use tfhe::shortint::prelude::*;
 use tfhe::shortint::prelude::CiphertextModulus;
 use std::time::{Instant, Duration};
-use crate::headers::{Context, LUT, PrivateKey};
+use aligned_vec::ABox;
+use num_complex::Complex;
+use tfhe::shortint::ciphertext::Degree;
+use tfhe::shortint::server_key::ShortintBootstrappingKey;
+use tfhe::shortint::server_key::ShortintBootstrappingKey::Classic;
+use crate::headers::{Context, LUT, PrivateKey,PublicKey};
 
 
 pub fn generate_accumulator<F>(
@@ -314,3 +319,62 @@ pub fn negacycle_vector(array_2d:Vec<Vec<u64>>,
     println!("{:?}",result);
     return result
 }
+
+pub fn lwe_to_ciphertext(lwe :LweCiphertext<Vec<u64>>,ctx :&Context)->Ciphertext
+{
+    let result = Ciphertext{
+        ct: lwe,
+        degree: Degree(0 as usize),
+        message_modulus: ctx.message_modulus(),
+        carry_modulus: ctx.carry_modulus(),
+        pbs_order: PBSOrder::KeyswitchBootstrap
+    };
+    result
+}
+
+pub fn extract_fourier(input :ShortintBootstrappingKey,ctx :&Context)->FourierLweBootstrapKey<ABox<[Complex<f64>]>>
+{
+    let test = FourierLweBootstrapKey::new(ctx.big_lwe_dimension(), ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(), ctx.pbs_base_log(), ctx.pbs_level());
+    match input {
+    ShortintBootstrappingKey::Classic(FourierLweBootstrapKey) => return FourierLweBootstrapKey,
+    other=> return test,
+};
+}
+
+pub fn bootstrap_glwe_LUT(glwe: GlweCiphertext<Vec<u64>>,public_key:&PublicKey,ctx :&Context){
+
+    let box_size = ctx.polynomial_size().0 / ctx.message_modulus().0;
+
+    // Create the accumulator
+    let mut input_vec : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    let mut ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus(),);
+
+    for i in 0..ctx.message_modulus().0 { //many_lwe.len()
+        let index = i * box_size;
+        extract_lwe_sample_from_glwe_ciphertext(&glwe, &mut ct_0, MonomialDegree(index));
+        input_vec.push(ct_0.to_owned());
+        }
+
+    let output_vec = generate_accumulator_via_vector_of_ciphertext(
+        ctx.polynomial_size(),
+        ctx.small_lwe_dimension() ,
+        ctx.message_modulus().0,
+        input_vec,
+        ctx.delta()
+    );
+
+    let output_list = lwe_vec_to_list(&output_vec,&ctx);
+    let mut output: GlweCiphertext<Vec<u64>> = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(), ctx.ciphertext_modulus());
+    private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(&public_key.pfpksk, &mut output,&output_list);
+
+
+}
+
+pub fn lwe_vec_to_list(lwe_vec :&Vec<LweCiphertext<Vec<u64>>>, ctx:&Context) -> LweCiphertextListOwned<u64> {
+    let mut lwe_list =LweCiphertextList::new(0,ctx.small_lwe_dimension().to_lwe_size(),LweCiphertextCount(ctx.polynomial_size().0),ctx.ciphertext_modulus());
+    for (mut dst,src) in lwe_list.iter_mut().zip(lwe_vec.iter()){
+        dst.as_mut().copy_from_slice(src.as_ref());
+    }
+    lwe_list
+}
+

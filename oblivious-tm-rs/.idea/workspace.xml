@@ -16,12 +16,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2144bdef-b464-4817-a4a1-e447794382c2" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/encrypt_instructions.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/blind_array_access2d.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/blind_array_access2d.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/encrypt_instructions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/encrypt_instructions.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/headers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/headers.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/helpers.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/helpers.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/test_glwe.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/test_glwe.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -111,8 +111,23 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/main.rs</url>
-          <line>556</line>
+          <line>510</line>
           <option name="timeStamp" value="14" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/blind_array_access2d.rs</url>
+          <line>106</line>
+          <option name="timeStamp" value="16" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/main.rs</url>
+          <line>59</line>
+          <option name="timeStamp" value="17" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/src/main.rs</url>
+          <line>287</line>
+          <option name="timeStamp" value="18" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

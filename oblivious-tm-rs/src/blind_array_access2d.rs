@@ -106,11 +106,6 @@ pub fn blind_array_access2d() {
 }
 
 
-
-
-
-
-
 pub fn bacc2d(
     array2d: &Vec<LUT>,
     lwe_column: &LweCiphertext<Vec<u64>>,
@@ -120,8 +115,8 @@ pub fn bacc2d(
 )
     -> LweCiphertext<Vec<u64>>
 {
-    
-    let start_multi_pbs = Instant::now();
+
+
     let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
     pbs_results.par_extend(
     array2d
@@ -139,17 +134,8 @@ pub fn bacc2d(
             switched
         }),
     );
-    let duration_multi_pbs = start_multi_pbs.elapsed();
-    // println!("Temps multi pbs + key switch : {:?}",duration_multi_pbs);
-    //////////////////// LWE CIPHERTEXT PACKING////////////////////////
-    /*
-    Create a list of LWE ciphertext which will be packed into a GLWE ciphertext
-    */
-    let start_packing = Instant::now();
+
     let accumulator_final = LUT::from_vec_of_lwe(pbs_results, public_key, ctx);
-    let duration_packing = start_packing.elapsed();
-    // println!(" Temps Packing : {:?}",duration_packing);
-    //////////////////// FINAL PBS ////////////////////////
     let mut ct_res = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
     programmable_bootstrap_lwe_ciphertext(&lwe_line, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
     ct_res

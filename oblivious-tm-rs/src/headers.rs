@@ -1,14 +1,17 @@
 
 
 use aligned_vec::ABox;
+use concrete_fft::c64;
 use num_complex::Complex;
 use tfhe::boolean::public_key;
 use tfhe::{core_crypto::prelude::*};
-use tfhe::shortint::{prelude::*};
+use tfhe::shortint::{prelude::*, WopbsParameters};
 use tfhe::shortint::{prelude::CiphertextModulus};
 use tfhe::shortint::parameters::ClassicPBSParameters;
+use tfhe::shortint::parameters::parameters_wopbs_message_carry::WOPBS_PARAM_MESSAGE_2_CARRY_2_KS_PBS;
 
 pub struct Context{
+    pub(crate) wop_params : WopbsParameters,
     parameters : ClassicPBSParameters,
     big_lwe_dimension : LweDimension,
     delta : u64,
@@ -48,6 +51,7 @@ impl Context {
         let ciphertext_modulus = CiphertextModulus::new_native();
 
         Context{
+            wop_params: WOPBS_PARAM_MESSAGE_2_CARRY_2_KS_PBS,
             parameters,
             big_lwe_dimension,
             delta,
@@ -59,6 +63,46 @@ impl Context {
             ciphertext_modulus
 
         }
+    }
+    pub fn from_wop(parameters : ClassicPBSParameters,wop_param:WopbsParameters) -> Context {
+        let big_lwe_dimension = LweDimension(parameters.polynomial_size.0*parameters.glwe_dimension.0);
+        let full_message_modulus = parameters.message_modulus.0 * parameters.carry_modulus.0;
+        let delta = (1u64 << 63 ) / (full_message_modulus) as u64;
+
+        let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1)); // a changer peut-être pour les autres params
+
+        // Request the best seeder possible, starting with hardware entropy sources and falling back to
+        // /dev/random on Unix systems if enabled via cargo features
+        let mut boxed_seeder = new_seeder();
+        // Get a mutable reference to the seeder as a trait object from the Box returned by new_seeder
+        let seeder = boxed_seeder.as_mut();
+
+        // Create a generator which uses a CSPRNG to generate secret keys
+        let secret_generator =
+            SecretRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed());
+
+        // Create a generator which uses two CSPRNGs to generate public masks and secret encryption
+        // noise
+        let encryption_generator =
+            EncryptionRandomGenerator::<ActivatedRandomGenerator>::new(seeder.seed(), seeder);
+
+        let box_size = parameters.polynomial_size.0 / full_message_modulus as usize;
+        let ciphertext_modulus = CiphertextModulus::new_native();
+
+        Context{
+            wop_params: WOPBS_PARAM_MESSAGE_2_CARRY_2_KS_PBS,
+            parameters,
+            big_lwe_dimension,
+            delta,
+            full_message_modulus,
+            signed_decomposer,
+            secret_generator,
+            encryption_generator,
+            box_size,
+            ciphertext_modulus
+
+        }
+
     }
 
     // getters for each (private) parameters
@@ -72,9 +116,9 @@ impl Context {
     pub fn pbs_level(&self) -> DecompositionLevelCount {self.parameters.pbs_level}
     pub fn ks_level(&self) -> DecompositionLevelCount {self.parameters.ks_level}
     pub fn ks_base_log(&self) -> DecompositionBaseLog {self.parameters.ks_base_log}
-    pub fn pfks_level(&self) -> DecompositionLevelCount {self.parameters.pbs_level}
-    pub fn pfks_base_log(&self) -> DecompositionBaseLog {self.parameters.pbs_base_log}
-    pub fn pfks_modular_std_dev(&self) -> StandardDev {self.parameters.glwe_modular_std_dev}
+    pub fn pfks_level(&self) -> DecompositionLevelCount {self.wop_params.pbs_level}
+    pub fn pfks_base_log(&self) -> DecompositionBaseLog {self.wop_params.pbs_base_log}
+    pub fn pfks_modular_std_dev(&self) -> StandardDev {self.wop_params.glwe_modular_std_dev}
     pub fn message_modulus(&self) -> MessageModulus {self.parameters.message_modulus}
     pub fn carry_modulus(&self) -> CarryModulus {self.parameters.carry_modulus}
     pub fn delta(&self) -> u64 {self.delta}
@@ -83,9 +127,13 @@ impl Context {
     pub fn ciphertext_modulus(&self) -> CiphertextModulus {self.ciphertext_modulus}
     pub fn cbs_level(&self) -> DecompositionLevelCount {self.parameters.ks_level}
     pub fn cbs_base_log(&self) -> DecompositionBaseLog {self.parameters.ks_base_log}
+    pub fn wop_param(&self)->WopbsParameters{self.wop_params}
     // pub fn signed_decomposer(&self) -> SignedDecomposer<u64> {self.signed_decomposer}
 
 }
+
+
+
 
 pub struct PrivateKey{
     small_lwe_sk: LweSecretKey<Vec<u64>>,
@@ -219,6 +267,63 @@ impl PrivateKey{
             public_key
         }
     }
+
+    pub fn from(small_lwe_sk:LweSecretKeyOwned<u64>,glwe_sk:GlweSecretKeyOwned<u64>,big_lwe_sk:LweSecretKeyOwned<u64>,bsk :FourierLweBootstrapKey<ABox<[Complex<f64>]>>,ksk:LweKeyswitchKey<Vec<u64>>,ctx: &mut Context) -> PrivateKey {
+
+
+        let mut pfpksk = LwePrivateFunctionalPackingKeyswitchKey::new(
+            0,
+            ctx.pfks_base_log(),
+            ctx.pfks_level(),
+            ctx.small_lwe_dimension(),
+            ctx.glwe_dimension().to_glwe_size(),
+            ctx.polynomial_size(),
+            ctx.ciphertext_modulus()
+        );
+
+        // Here there is some freedom for the choice of the last polynomial from algorithm 2
+        // By convention from the paper the polynomial we use here is the constant -1
+        let mut last_polynomial = Polynomial::new(0, ctx.polynomial_size());
+        // Set the constant term to u64::MAX == -1i64
+        last_polynomial[0] = u64::MAX;
+        // Generate the LWE private functional packing keyswitch key
+        par_generate_lwe_private_functional_packing_keyswitch_key(
+            &small_lwe_sk,
+            &glwe_sk,
+            &mut pfpksk,
+            ctx.pfks_modular_std_dev(),
+            &mut ctx.encryption_generator,
+            |x| x,
+            &last_polynomial,
+        );
+
+        let cbs_pfpksk = par_allocate_and_generate_new_circuit_bootstrap_lwe_pfpksk_list(
+            &big_lwe_sk,
+            &glwe_sk,
+            ctx.pfks_base_log(),
+            ctx.pfks_level(),
+            ctx.pfks_modular_std_dev(),
+            ctx.ciphertext_modulus(),
+            &mut ctx.encryption_generator,
+        );
+
+
+        let public_key = PublicKey{
+            lwe_ksk: ksk,
+            pfpksk,
+            cbs_pfpksk,
+            fourier_bsk: bsk
+        };
+
+        PrivateKey{
+            small_lwe_sk,
+            big_lwe_sk,
+            glwe_sk,
+            public_key
+        }
+    }
+
+
 
     // getters for each attribute
     pub fn get_small_lwe_sk(&self) -> &LweSecretKey<Vec<u64>>{&self.small_lwe_sk}
