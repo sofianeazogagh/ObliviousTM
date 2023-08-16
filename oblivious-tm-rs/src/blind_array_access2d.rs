@@ -7,10 +7,7 @@ use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
 
 use crate::headers::{Context, LUT, PrivateKey, PublicKey};
-
-
-
-
+use crate::helpers::LWEaddu64;
 
 
 pub fn blind_array_access2d() {
@@ -115,6 +112,7 @@ pub fn bacc2d(
 )
     -> LweCiphertext<Vec<u64>>
 {
+    let lwe_line_encoded  = LWEaddu64(&lwe_line,ctx.full_message_modulus() as u64,&ctx);
 
 
     let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
@@ -137,7 +135,7 @@ pub fn bacc2d(
 
     let accumulator_final = LUT::from_vec_of_lwe(pbs_results, public_key, ctx);
     let mut ct_res = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
-    programmable_bootstrap_lwe_ciphertext(&lwe_line, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
+    programmable_bootstrap_lwe_ciphertext(&lwe_line_encoded, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
     ct_res
 }
 

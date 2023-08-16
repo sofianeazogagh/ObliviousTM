@@ -72,7 +72,7 @@ pub fn main() {
     let tape_pt=PlaintextList::from_container(tape_int);
 
     let mut tape = private_key.allocate_and_encrypt_glwe(tape_pt, &mut ctx);
-    let mut state = cks.encrypt(0).ct;
+    let mut state = private_key.allocate_and_encrypt_lwe(0,&mut ctx);
 
     println!("State Encrypted");
     let mut instruction_write = vec![
@@ -82,9 +82,9 @@ pub fn main() {
     ];
 
     let mut instruction_position = vec![
-        vec![15, 15, 1, 1, 15, 15, 0],
-        vec![15, 15, 1, 1, 1, 15, 0],
-        vec![15, 1, 15, 1, 15, 15, 0],
+        vec![1, 1, 7, 1, 1, 1, 0],
+        vec![1, 1, 7, 1, 7, 1, 0],
+        vec![1, 7, 1, 1, 1, 1, 0],
     ];
 
     let mut instruction_state = vec![
@@ -92,9 +92,9 @@ pub fn main() {
         vec![0, 1, 3, 3, 4, 5, 6],
         vec![1, 2, 5, 4, 0, 6, 6],
     ];
-    instruction_write = negacycle_vector(instruction_write, &mut ctx);
-    //instruction_position = negacycle_vector(instruction_position, &mut ctx);
-    instruction_state = negacycle_vector(instruction_state, &mut ctx);
+    // instruction_write = negacycle_vector(instruction_write, &mut ctx);
+    // instruction_position = negacycle_vector(instruction_position, &mut ctx);
+    // instruction_state = negacycle_vector(instruction_state, &mut ctx);
     println!("tape = {:?}",instruction_state);
 
 
@@ -116,7 +116,7 @@ pub fn main() {
         println!("cellContent = {}", current_cell);
 
         tape = write_new_cell_content(&mut tape, cellContent.clone(), state.clone(),&instruction_write, &public_key, &ctx, &private_key);
-        tape = change_head_position(&mut tape, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &wop_key,&associated_glwe_sk,sks.to_owned(),&private_key);
+        tape = change_head_position(&mut tape, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &wop_key,&associated_glwe_sk,&associated_lwe_sk,sks.to_owned(),&private_key);
         state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
 
     }
@@ -175,8 +175,8 @@ pub fn change_head_position(
     ctx: &Context,
     wop_key: &WopbsKey,
     associated_glwe_sk: &GlweSecretKeyOwned<u64>,
+    associated_lwe_sk: &LweSecretKeyOwned<u64>,
     sks: tfhe::shortint::server_key::ServerKey,
-
     private_key: &PrivateKey,
 
 ) ->GlweCiphertext<Vec<u64>>
@@ -187,12 +187,35 @@ pub fn change_head_position(
         &cellContent,
         ctx,
         public_key,
-
     );
+
+//     let mut tape = GlweCiphertext::new(
+//     0u64,
+//     ctx.wop_params.glwe_dimension.to_glwe_size(),
+//     ctx.wop_params.polynomial_size,
+//     CiphertextModulus::new_native(),
+//     );
+//
+//     for i in 0..tape.polynomial_size().0 {
+//         tape.get_mut_body().as_mut()[i] = (i as u64 % 8).wrapping_mul(ctx.delta());
+//     }
+
+    let result = private_key.decrypt_and_decode_glwe(&tape,&ctx);
+    println!("tape = {:?}",result);
 
 
     // Lut shifted to the left
     let mut left_shift_tape = tape.clone();
+    let mut tape_first = LweCiphertext::new(0, ctx.big_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
+    extract_lwe_sample_from_glwe_ciphertext(&tape,&mut tape_first,MonomialDegree(0));
+    let mut tape_first_switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
+    keyswitch_lwe_ciphertext(&public_key.lwe_ksk,&tape_first,&mut tape_first_switched);
+    let mut glwe_first = tape.clone();
+    private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext(&public_key.pfpksk, &mut glwe_first, &tape_first_switched);
+    glwe_first.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
+    glwe_first.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0-1))});
+
+
     tape
         .as_polynomial_list()
         .iter()
@@ -204,9 +227,20 @@ pub fn change_head_position(
                 MonomialDegree(1),
             )
         });
-
+    left_shift_tape = glwe_ciphertext_add(left_shift_tape,glwe_first.to_owned());
+    left_shift_tape = glwe_ciphertext_add(left_shift_tape,glwe_first);
     // Lut shifted to the left
+
+
     let mut right_shift_tape = tape.clone();
+    let mut tape_last = LweCiphertext::new(0, ctx.big_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
+    extract_lwe_sample_from_glwe_ciphertext(&tape,&mut tape_last,MonomialDegree(ctx.polynomial_size().0-1));
+    let mut tape_last_switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(), ctx.ciphertext_modulus());
+    keyswitch_lwe_ciphertext(&public_key.lwe_ksk,&tape_last,&mut tape_last_switched);
+    let mut glwe_last = tape.clone();
+    private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext(&public_key.pfpksk, &mut glwe_last, &tape_last_switched);
+    glwe_last.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
+
     tape
         .as_polynomial_list()
         .iter()
@@ -218,6 +252,10 @@ pub fn change_head_position(
                 MonomialDegree(1),
             )
         });
+
+    right_shift_tape = glwe_ciphertext_add(right_shift_tape,glwe_last.to_owned());
+    right_shift_tape = glwe_ciphertext_add(right_shift_tape,glwe_last);
+
 
     let mut tape_list = GlweCiphertextList::new(
         0u64,
@@ -274,12 +312,38 @@ pub fn change_head_position(
             ),
     );
 
+    let num_bits = (ctx.carry_modulus().0*ctx.message_modulus().0).ilog2();
+    let decomposer = SignedDecomposer::new(
+        // Include the padding bit
+        DecompositionBaseLog(num_bits as usize + 1),
+        DecompositionLevelCount(1),
+    );
+    let bit_decomposer = SignedDecomposer::new(DecompositionBaseLog(1), DecompositionLevelCount(1)) as SignedDecomposer<u64>;
+
     let positionChange_ct = lwe_to_ciphertext(positionChange,&ctx);
+
+    // let result = private_key.decrypt_and_decode_glwe(&left_shift_tape,&ctx);
+    // println!("left_shift_tape = {:?}",result);
         // Go to wopbs params
         let positionChange = wop_key.keyswitch_to_wopbs_params(&sks, &positionChange_ct);
+        let sanity_decrypt =
+        decrypt_lwe_ciphertext(&associated_glwe_sk.clone().into_lwe_secret_key(), &positionChange.ct);
+
+    let sanity_decrypt = decomposer.closest_representable(sanity_decrypt.0) / ctx.delta();
+    println!("sanity decrypt={sanity_decrypt}");
 
         // We will extract the 2 LSBs in our case
         let extracted_bits = wop_key.extract_bits(DeltaLog((ctx.delta().ilog(2))as usize), &positionChange, 2);
+
+    let msg =1 as u64;
+    println!("msg_b: {msg:064b}");
+    for ct_bit in extracted_bits.iter() {
+        let sanity_decrypt = decrypt_lwe_ciphertext(&associated_lwe_sk, &ct_bit);
+        println!(
+            "bit: {}",
+            bit_decomposer.closest_representable(sanity_decrypt.0) >> 63
+        );
+    }
 
         let mut ggsw_ciphertext_list = GgswCiphertextList::new(
             0u64,
@@ -344,7 +408,7 @@ pub fn change_head_position(
             ctx.wop_params.glwe_dimension.to_glwe_size(),
             ctx.wop_params.polynomial_size,
             CiphertextModulus::new_native(),
-        ) as GlweCiphertext<Vec<u64>>;
+        );
 
         // Glwe Selection
         glwe_cmux_tree_memory_optimized(
@@ -355,8 +419,20 @@ pub fn change_head_position(
             buffers.stack(),
         );
 
+    let mut output_plaintext_list =
+        PlaintextList::new(0u64, PlaintextCount(glwe_ciphertext.polynomial_size().0));
 
+    decrypt_glwe_ciphertext(
+        &associated_glwe_sk,
+        &glwe_ciphertext,
+        &mut output_plaintext_list,
+    );
 
+    output_plaintext_list
+        .iter_mut()
+        .for_each(|x| *x.0 = decomposer.closest_representable(*x.0) / ctx.delta());
+
+    println!("msg={msg}\nOutput: {output_plaintext_list:?}");
 
     return glwe_ciphertext;
 
@@ -489,9 +565,10 @@ pub fn glwe_cmux_tree_memory_optimized<Scalar: UnsignedTorus + CastInto<usize>>(
 
                         drop(diff_data);
 
-                        t0_j.as_mut().copy_from_slice( t_0_j_plus_1.as_ref());
-                        t1_j.as_mut().copy_from_slice( t_1_j_plus_1.as_ref());
                         j_counter = j_counter_plus_1;
+                        t0_j = t_0_j_plus_1;
+                        t1_j = t_1_j_plus_1;
+
                     } else {
                         let mut output = output_glwe.as_mut_view();
                         output.as_mut().copy_from_slice(t0_j.as_ref());

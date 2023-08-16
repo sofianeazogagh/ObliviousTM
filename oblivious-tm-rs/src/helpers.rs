@@ -431,17 +431,6 @@ pub fn lwe_vec_to_list(lwe_vec :&Vec<LweCiphertext<Vec<u64>>>, ctx:&Context) -> 
     lwe_list
 }
 
-pub fn GLWEaddu64(glwe:&mut GlweCiphertext<Vec<u64>>,constant: u64,mut ctx:&Context)->GlweCiphertext<Vec<u64>> {
-
-    let mut constant_plain = PlaintextList::new(0_u64,PlaintextCount(ctx.polynomial_size().0));
-    let mut constant_poly = constant_plain.as_mut_polynomial();
-    *constant_poly.last_mut().unwrap() =   constant*ctx.delta();
-
-    let constant_glwe = allocate_and_trivially_encrypt_new_glwe_ciphertext(ctx.glwe_dimension().to_glwe_size(),&constant_plain,ctx.ciphertext_modulus());
-    let result = glwe_ciphertext_add(glwe.to_owned(),constant_glwe);
-    return result
-}
-
 pub fn LWEaddu64(lwe: &LweCiphertext<Vec<u64>>, constant: u64, mut ctx:&Context) -> LweCiphertextOwned<u64> {
 
     let mut constant_plain = Plaintext(constant*ctx.delta());
