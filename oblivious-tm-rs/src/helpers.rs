@@ -2,6 +2,7 @@ use tfhe::{core_crypto::prelude::*};
 use tfhe::shortint::prelude::*;
 use tfhe::shortint::prelude::CiphertextModulus;
 use std::time::{Instant, Duration};
+use tfhe::core_crypto::prelude::polynomial_algorithms::polynomial_wrapping_monic_monomial_mul_assign;
 use crate::headers::{Context, LUT, PrivateKey, PublicKey};
 use crate::test_glwe::glwe_ciphertext_add;
 
@@ -362,7 +363,7 @@ pub fn create_monomial(position_0:&LweCiphertext<Vec<u64>>,position_1:&LweCipher
 
 }
 
-pub fn bootstrap_glwe_LUT(glwe: &GlweCiphertext<Vec<u64>>, public_key:&PublicKey, ctx :&Context) -> GlweCiphertext<Vec<u64>> {
+pub fn bootstrap_glwe_LUT(glwe: &GlweCiphertext<Vec<u64>>, public_key:&PublicKey, ctx :&Context) -> LUT {
 
 
     let box_size = ctx.polynomial_size().0 / ctx.message_modulus().0;
@@ -380,18 +381,9 @@ pub fn bootstrap_glwe_LUT(glwe: &GlweCiphertext<Vec<u64>>, public_key:&PublicKey
         input_vec.push(ct_small.to_owned());
     }
 
-    let output_vec = generate_accumulator_via_vector_of_ciphertext(
-        ctx.polynomial_size(),
-        ctx.small_lwe_dimension() ,
-        ctx.message_modulus().0,
-        input_vec,
-        ctx.delta()
-    );
+    let mut output = LUT::from_vec_of_lwe(input_vec,&public_key,&ctx);
+    output.0.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
 
-
-    let output_list = lwe_vec_to_list(&output_vec,&ctx);
-    let mut output: GlweCiphertext<Vec<u64>> = GlweCiphertext::new(0_u64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(), ctx.ciphertext_modulus());
-    private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(&public_key.pfpksk, &mut output,&output_list);
     output
 
 }
@@ -402,17 +394,6 @@ pub fn lwe_vec_to_list(lwe_vec :&Vec<LweCiphertext<Vec<u64>>>, ctx:&Context) -> 
         dst.as_mut().copy_from_slice(src.as_ref());
     }
     lwe_list
-}
-
-pub fn GLWEaddu64(glwe:&mut GlweCiphertext<Vec<u64>>,constant: u64,mut ctx:&Context)->GlweCiphertext<Vec<u64>> {
-
-    let mut constant_plain = PlaintextList::new(0_u64,PlaintextCount(ctx.polynomial_size().0));
-    let mut constant_poly = constant_plain.as_mut_polynomial();
-    *constant_poly.last_mut().unwrap() =   constant*ctx.delta();
-
-    let constant_glwe = allocate_and_trivially_encrypt_new_glwe_ciphertext(ctx.glwe_dimension().to_glwe_size(),&constant_plain,ctx.ciphertext_modulus());
-    let result = glwe_ciphertext_add(glwe.to_owned(),constant_glwe);
-    return result
 }
 
 pub fn LWEaddu64(lwe: &LweCiphertext<Vec<u64>>, constant: u64, mut ctx:&Context) -> LweCiphertextOwned<u64> {

@@ -4,6 +4,7 @@ use aligned_vec::ABox;
 use num_complex::Complex;
 use tfhe::boolean::public_key;
 use tfhe::{core_crypto::prelude::*};
+use tfhe::core_crypto::prelude::polynomial_algorithms::polynomial_wrapping_monic_monomial_mul_assign;
 use tfhe::shortint::{prelude::*};
 use tfhe::shortint::{prelude::CiphertextModulus};
 use tfhe::shortint::Parameters;
@@ -467,56 +468,21 @@ impl Context {
 
             lwe_ciphertext_list
         }
+        pub fn glwe_absorption_monic_monomial(&self,
+                                              glwe : &mut GlweCiphertext<Vec<u64>>,
+                                              monomial_degree : MonomialDegree,
+        )
+        {
+            let mut glwe_poly_list = glwe.as_mut_polynomial_list();
+            for mut glwe_poly in glwe_poly_list.iter_mut(){
+                // let glwe_poly_read_only = Polynomial::from_container(glwe_poly.as_ref().to_vec());
+                polynomial_wrapping_monic_monomial_mul_assign(&mut glwe_poly, monomial_degree);
+            }
+        }
 
 
     }
 
-// pub fn public_key_from_sks(sks: ServerKey, ctx: &mut Context) ->PublicKey{
-//     let mut pfpksk = LwePrivateFunctionalPackingKeyswitchKey::new(
-//         0,
-//         ctx.pfks_base_log(),
-//         ctx.pfks_level(),
-//         ctx.small_lwe_dimension(),
-//         ctx.glwe_dimension().to_glwe_size(),
-//         ctx.polynomial_size(),
-//         ctx.ciphertext_modulus()
-//     );
-//
-//     // Here there is some freedom for the choice of the last polynomial from algorithm 2
-//     // By convention from the paper the polynomial we use here is the constant -1
-//     let mut last_polynomial = Polynomial::new(0, ctx.polynomial_size());
-//     // Set the constant term to u64::MAX == -1i64
-//     last_polynomial[0] = u64::MAX;
-//     // Generate the LWE private functional packing keyswitch key
-//     par_generate_lwe_private_functional_packing_keyswitch_key(
-//         &small_lwe_sk,
-//         &glwe_sk,
-//         &mut pfpksk,
-//         ctx.pfks_modular_std_dev(),
-//         &mut ctx.encryption_generator,
-//         |x| x,
-//         &last_polynomial,
-//     );
-//
-//     let cbs_pfpksk = par_allocate_and_generate_new_circuit_bootstrap_lwe_pfpksk_list(
-//         &big_lwe_sk,
-//         &glwe_sk,
-//         ctx.pfks_base_log(),
-//         ctx.pfks_level(),
-//         ctx.pfks_modular_std_dev(),
-//         ctx.ciphertext_modulus(),
-//         &mut ctx.encryption_generator,
-//     );
-//
-//     let public_key : PublicKey=PublicKey{
-//         lwe_ksk: sks.key_switching_key,
-//         fourier_bsk: sks.bootstrapping_key,
-//         pfpksk: pfpksk,
-//         cbs_pfpksk: cbs_pfpksk,
-//     };
-//     public_key
-//
-// }
 
     pub struct LUT(pub(crate) GlweCiphertext<Vec<u64>>);
 
@@ -590,30 +556,12 @@ impl Context {
         }
 
 
-        fn add_redundancy(lwe : &LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context, negacyclicity : bool ) -> Vec<LweCiphertext<Vec<u64>>>{
+        fn add_redundancy(lwe : &LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context) -> Vec<LweCiphertext<Vec<u64>>>{
             let box_size = ctx.box_size();
-            let mut redundant_lwe : Vec<LweCiphertext<Vec<u64>>> = vec![(*lwe).clone();box_size];
-
-
-            if negacyclicity {
-                
-                let ct_0 = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
-                let half_box_size = box_size / 2;
-                // Negate the first half_box_size coefficients to manage negacyclicity and rotate
-                for lwe_i in redundant_lwe[0..half_box_size].iter_mut() {
-                    public_key.wrapping_neg_lwe(lwe_i);
-                }
-                redundant_lwe.resize(ctx.full_message_modulus()*box_size, ct_0);
-                redundant_lwe.rotate_left(half_box_size);
-                redundant_lwe
-
-            }else {
-                redundant_lwe
-            }
+            let redundant_lwe : Vec<LweCiphertext<Vec<u64>>> = vec![(*lwe).clone();box_size];
+            redundant_lwe
 
         }
-
-
 
 
         pub fn from_function<F>(f: F,ctx : &Context) -> LUT where F: Fn(u64) -> u64 {
@@ -680,14 +628,22 @@ impl Context {
                 &mut glwe,
                 &lwe_ciphertext_list,
             );
+
+            let poly_monomial_degree = MonomialDegree(2*ctx.polynomial_size().0 - ctx.box_size()/2);
+            public_key.glwe_absorption_monic_monomial(&mut glwe, poly_monomial_degree);
+
+
             LUT(glwe)
 
         }
 
 
-        pub fn from_lwe(lwe : &LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context, negacyclicity : bool) -> LUT{
 
-            let redundant_lwe = Self::add_redundancy(lwe, public_key, ctx, negacyclicity);
+        pub fn from_lwe(lwe : &LweCiphertext<Vec<u64>>, public_key : &PublicKey, ctx : &Context) -> LUT{
+
+
+            let half_box = ctx.box_size()/2;
+            let redundant_lwe = Self::add_redundancy(lwe, public_key, ctx);
             let mut container : Vec<u64> = Vec::new();
             for ct in redundant_lwe{
                 let mut lwe = ct.into_container();
@@ -702,6 +658,10 @@ impl Context {
                 &mut glwe,
                 &lwe_ciphertext_list,
             );
+
+            let poly_monomial_degree = MonomialDegree(2*ctx.polynomial_size().0 - ctx.box_size()/2);
+            public_key.glwe_absorption_monic_monomial(&mut glwe, poly_monomial_degree);
+
             LUT(glwe)
 
         }
@@ -776,8 +736,6 @@ impl Context {
 
 
     impl LUTStack{
-
-
 
         pub fn new(ctx : &Context) -> LUTStack{
             let lut = LUT(GlweCiphertext::new(0_64, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(),ctx.ciphertext_modulus()));
@@ -957,7 +915,7 @@ impl Context {
             let public_key = &private_key.public_key;
             let our_input = 8u64;
             let lwe = private_key.allocate_and_encrypt_lwe(our_input, &mut ctx);
-            let lut = LUT::from_lwe(&lwe, public_key, &ctx, false);
+            let lut = LUT::from_lwe(&lwe, public_key, &ctx);
             let output_pt =  private_key.decrypt_and_decode_glwe(&lut.0, &ctx);
             println!("Test LWE to LUT");
             println!("{:?}", output_pt);

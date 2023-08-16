@@ -48,12 +48,14 @@ pub fn main() {
         println!("{:?}", tape);
         blind_array_access2d();
 
-        let accumulator_u64 = generate_accumulator_via_vector(ctx.polynomial_size(), ctx.message_modulus().0, ctx.delta(), tape);
-        let pt = PlaintextList::from_container(accumulator_u64);
+        let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
 
-
-        let mut tape = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(), ctx.ciphertext_modulus());
-        private_key.encrypt_glwe(&mut tape, pt, &mut ctx);
+        // let accumulator_u64 = generate_accumulator_via_vector(ctx.polynomial_size(), ctx.message_modulus().0, ctx.delta(), tape);
+        // let pt = PlaintextList::from_container(accumulator_u64);
+        //
+        //
+        // let mut tape = GlweCiphertext::new(0, ctx.glwe_dimension().to_glwe_size(), ctx.polynomial_size(), ctx.ciphertext_modulus());
+        // private_key.encrypt_glwe(&mut tape, pt, &mut ctx);
 
         let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
 
@@ -120,17 +122,17 @@ pub fn main() {
 
 
         for i in 0..step {
-            let result = private_key.decrypt_and_decode_glwe(&tape,&ctx);
+            let result = private_key.decrypt_and_decode_glwe(&tape.0,&ctx);
             println!("tape = {:?}",result);
             let current_state = private_key.decrypt_lwe(&state,&ctx);
             println!("state = {}", current_state);
 
-            let mut cellContent = read_cell_content(&mut tape, &public_key, &ctx);
+            let mut cellContent = read_cell_content(&mut tape.0, &public_key, &ctx);
             let current_cell = private_key.decrypt_lwe(&cellContent,&ctx);
             println!("cellContent = {}", current_cell);
 
-            tape = write_new_cell_content(&mut tape, cellContent.clone(), state.clone(),&instruction_write, &public_key, &ctx, &private_key);
-            tape = change_head_position(&mut tape, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
+            tape.0 = write_new_cell_content(&mut tape.0, cellContent.clone(), state.clone(),&instruction_write, &public_key, &ctx, &private_key);
+            tape.0 = change_head_position(&mut tape.0, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
             state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
 
         }
@@ -212,8 +214,11 @@ pub fn main() {
         blind_rotate_assign(&res, tape, &public_key.fourier_bsk);
         //tape.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
 
-        //return bootstrap_glwe_LUT( tape,&public_key,&ctx);
-        return tape.to_owned()
+        let result = private_key.decrypt_and_decode_glwe(&tape,&ctx);
+        println!("tape without bootstrap= {:?}",result);
+
+        return bootstrap_glwe_LUT( tape,&public_key,&ctx).0;
+        //return tape.to_owned()
     }
 
     pub fn get_new_state(
