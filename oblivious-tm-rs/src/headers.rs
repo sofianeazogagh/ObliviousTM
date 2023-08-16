@@ -479,6 +479,20 @@ impl Context {
                 polynomial_wrapping_monic_monomial_mul_assign(&mut glwe_poly, monomial_degree);
             }
         }
+        pub fn glwe_sum(&self,
+                        ct1 : &GlweCiphertext<Vec<u64>>,
+                        ct2 : &GlweCiphertext<Vec<u64>>,
+        )
+                        -> GlweCiphertext<Vec<u64>>
+        {
+            let mut res = GlweCiphertext::new(0_u64, ct1.glwe_size(), ct1.polynomial_size(),ct1.ciphertext_modulus());
+
+            res.as_mut().iter_mut()
+                .zip(
+                    ct1.as_ref().iter().zip(ct2.as_ref().iter())
+                ).for_each(|(dst, (&lhs, &rhs))| *dst = lhs.wrapping_add(rhs));
+            return res;
+        }
 
 
     }
