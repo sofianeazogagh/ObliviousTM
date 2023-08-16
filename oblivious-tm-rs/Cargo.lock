@@ -362,9 +362,9 @@ dependencies = [
 
 [[package]]
 name = "tfhe"
-version = "0.2.5"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1362fafd25500a31732938e0ffcc9358e8c58b5b25ffda4eef8bdf0b08e5ef1"
+checksum = "92c45bcdc994c1b6fd57b102500595b6700b097661756e1383a09919ade288fd"
 dependencies = [
  "aligned-vec",
  "bytemuck",
