@@ -27,7 +27,7 @@ impl Context {
             let full_message_modulus = parameters.message_modulus.0 * parameters.carry_modulus.0;
             let delta = (1u64 << 63) / (full_message_modulus) as u64;
 
-            let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1)); // a changer peut-être pour les autres params
+            let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(full_message_modulus.ilog2() as usize + 1), DecompositionLevelCount(1)); // a changer peut-être pour les autres params
 
             // Request the best seeder possible, starting with hardware entropy sources and falling back to
             // /dev/random on Unix systems if enabled via cargo features
