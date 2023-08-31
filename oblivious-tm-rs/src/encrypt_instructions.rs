@@ -36,7 +36,7 @@ pub fn decrypt_instructions(
     let mut output_plaintext_list = PlaintextList::new(0, PlaintextCount(polynomial_size.0));
     decrypt_glwe_ciphertext(&glwe_key, &cipher, &mut output_plaintext_list);
 
-    let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(5), DecompositionLevelCount(1));
+    let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(4), DecompositionLevelCount(1));
 
     output_plaintext_list
         .iter_mut()

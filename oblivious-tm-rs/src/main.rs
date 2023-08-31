@@ -29,12 +29,17 @@ use crate::blind_pop::blind_pop;
 use crate::blind_push::blind_push;
 use crate::blind_retrieve::blind_retrieve;
 use crate::headers::{Context, LUT, PrivateKey, PublicKey};
-use crate::helpers::{bootstrap_glwe_LUT, generate_accumulator_via_vector, LWEaddu64, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
-use crate::OTM::OTM;
+use crate::helpers::{bootstrap_glwe_LUT, bootstrap_glwe_LUT_with_actual_bootstrap, generate_accumulator_via_vector, LWEaddu64, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
+use crate::OTM::{get_new_state, OTM, read_cell_content};
 use crate::private_insert::private_insert;
 
 
 pub fn main() {
+    // OTM()
+    test_state();
+}
+
+pub fn test_write() {
     let param = PARAM_MESSAGE_3_CARRY_0;
     let mut ctx = Context::from(param);
 
@@ -53,7 +58,8 @@ pub fn main() {
     println!("{:?}", tape_vec);
 
     let mut tape = LUT::from_vec(&tape_vec, &private_key, &mut ctx);
-    let mut tape2 = LUT{ 0: tape.0.to_owned(),};
+    let mut tape2 = LUT {0:tape.0.to_owned()};
+
 
     let mut vec_of_result=Vec::new();
 
@@ -61,7 +67,6 @@ pub fn main() {
     let newCellContent =private_key.allocate_and_encrypt_lwe_big_key(0,&mut ctx);
 
     for i in 0..100 {
-
 
         // let test = private_key.decrypt_lwe_big_key(&newCellContent,&ctx);
         // println!("newcellcontent bacc = {test}");
@@ -80,12 +85,11 @@ pub fn main() {
         // bootstrap_glwe_LUT_with_actual_boostrap_for_first_element(&input,&public_key,&ctx,&private_key);
 
         tape.0 = glwe_ciphertext_add(tape.0.to_owned(), input.to_owned(), );
+        let tape = bootstrap_glwe_LUT_with_actual_bootstrap(&tape.0, &public_key, &ctx);
         let result = private_key.decrypt_and_decode_glwe(&tape.0, &ctx);
         vec_of_result.push(result[0].to_owned());
 
         println!("{i}");
-
-
     }
 
     println!("resultat cellcontent = {:?}\n",vec_of_result);
@@ -110,6 +114,82 @@ pub fn main() {
     }
 
     println!("resultat cellcontent = {:?}\n",vec_of_result);
+    // OTM();
 }
+
+pub fn test_state() {
+    let param = PARAM_MESSAGE_3_CARRY_0;
+    let mut ctx = Context::from(param);
+
+
+    let private_key = PrivateKey::new(&mut ctx);
+    let public_key = private_key.get_public_key();
+
+
+    println!("Key generated");
+
+    //creation de tape
+    let mut tape_vec = vec![2_u64, 0, 0,0];
+    while tape_vec.len() < ctx.message_modulus().0 {
+        tape_vec.push(0_u64);
+    }
+    println!("{:?}", tape_vec);
+
+    let mut tape = LUT::from_vec(&tape_vec, &private_key, &mut ctx);
+    let mut tape2 = LUT {0:tape.0.to_owned()};
+
+
+
+    let mut instruction_write = vec![
+        vec![0, 0, 1, 0, 1, 0, 0],
+        vec![0, 0, 7, 0, 7, 0, 0],
+        vec![0, 0, 0, 0, 7, 0, 0],
+    ];
+
+    let mut instruction_position = vec![
+        vec![1, 1, 15, 15, 1, 1, 0],
+        vec![1, 1, 15, 15, 15, 1, 0],
+        vec![1, 15, 1, 15, 1, 1, 0],
+    ];
+
+    let mut instruction_state = vec![
+        vec![0, 1, 2, 3, 0, 5, 6],
+        vec![0, 1, 3, 3, 4, 5, 6],
+        vec![1, 2, 5, 4, 0, 6, 6],
+    ];
+    // println!("tape = {:?}",instruction_state);
+
+
+
+    let instruction_write = encrypt_instructions(&mut ctx, &private_key, instruction_write);
+    let instruction_position = encrypt_instructions(&mut ctx, &private_key, instruction_position);
+    let instruction_state = encrypt_instructions(&mut ctx, &private_key, instruction_state);
+    println!("Instructions Encrypted");
+
+
+    let mut vec_of_result=Vec::new();
+
+
+    let cellContent =read_cell_content(&mut tape.0,&public_key,&ctx);
+    // let result = private_key.decrypt_lwe(&cellContent,&ctx);
+    // println!("cellcontent {result}");
+
+    let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
+
+    println!("State Encrypted");
+
+    for i in 0..5 {
+        state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
+        vec_of_result.push(private_key.decrypt_lwe(&state,&ctx));
+
+        println!("{i}");
+    }
+
+    println!("resultat state = {:?}\n",vec_of_result);
+
+
+
+}
+
 
 

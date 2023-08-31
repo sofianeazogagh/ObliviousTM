@@ -15,7 +15,7 @@ use crate::blind_pop::blind_pop;
 use crate::blind_push::blind_push;
 use crate::blind_retrieve::blind_retrieve;
 use crate::headers::{Context, LUT, PrivateKey, PublicKey};
-use crate::helpers::{bootstrap_glwe_LUT, generate_accumulator_via_vector, LWEaddu64, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
+use crate::helpers::{bootstrap_glwe_LUT, bootstrap_glwe_LUT_with_actual_bootstrap, generate_accumulator_via_vector, LWEaddu64, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
 use crate::private_insert::private_insert;
 
 
@@ -40,10 +40,9 @@ pub fn OTM() {
     //creation of tape
     let mut tape = vec![1_u64, 2, 1];
     while tape.len() < ctx.message_modulus().0 {
-        tape.push(2_u64);
+        tape.push(6_u64);
     }
     println!("{:?}", tape);
-    blind_array_access2d();
 
     let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
 
@@ -79,36 +78,7 @@ pub fn OTM() {
     //instruction_position = negacycle_vector(instruction_position, &mut ctx);
     //instruction_state = negacycle_vector(instruction_state, &mut ctx);
 
-    // let mut instruction_write = vec![
-    //     vec![0,0,0],
-    //     vec![0,0,0],
-    //     vec![7,1,0],
-    //     vec![0,0,0],
-    //     vec![7,1,1],
-    //     vec![0,0,0],
-    //     vec![0,0,0],
-    // ];
-    //
-    // let mut instruction_position = vec![
-    //     vec![7,7,7],
-    //     vec![7,7,1],
-    //     vec![1,1,7],
-    //     vec![1,1,1],
-    //     vec![7,1,7],
-    //     vec![7,7,7],
-    //     vec![0,0,0],
-    // ];
-    //
-    // let mut instruction_state = vec![
-    //     vec![0,0,7],
-    //     vec![7,7,6],
-    //     vec![6,5,3],
-    //     vec![5,5,4],
-    //     vec![0,4,0],
-    //     vec![3,3,2],
-    //     vec![2,2,2],
-    // ];
-    println!("tape = {:?}",instruction_state);
+    // println!("tape = {:?}",instruction_state);
 
 
 
@@ -119,10 +89,8 @@ pub fn OTM() {
 
 
     for i in 0..step {
-        let result = private_key.decrypt_and_decode_glwe(&tape.0,&ctx);
+        let result = tape.print_lut(&private_key,&mut ctx);
         println!("tape = {:?}",result);
-        let current_state = private_key.decrypt_lwe(&state,&ctx);
-        println!("state = {}", current_state);
 
         let mut cellContent = read_cell_content(&mut tape.0, &public_key, &ctx);
         let current_cell = private_key.decrypt_lwe(&cellContent,&ctx);
@@ -131,6 +99,8 @@ pub fn OTM() {
         tape.0 = write_new_cell_content(&mut tape.0, cellContent.clone(), state.clone(),&instruction_write, &public_key, &ctx, &private_key);
         tape.0 = change_head_position(&mut tape.0, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
         state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
+        let current_state = private_key.decrypt_lwe(&state,&ctx);
+        println!("state = {}", current_state);
 
     }
 }
@@ -172,14 +142,11 @@ pub fn write_new_cell_content(
     let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
     keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &newCellContent, &mut switched);
 
-    let new_cell_content_ciphertext_list = one_lwe_to_lwe_ciphertext_list(&switched, &ctx);
+    let mut newCellContentGlwe = LUT::from_lwe(&switched,&public_key,&ctx).0;
 
-    let mut newCellContentGlwe: GlweCiphertext<Vec<u64>> = GlweCiphertext::new(0_u64, tape.glwe_size(), tape.polynomial_size(), ctx.ciphertext_modulus());
-    // private_functional_keyswitch_lwe_ciphertext_into_glwe_ciphertext(&pfpksk, &mut newCellContentGlwe,&res);
+    let mut result = glwe_ciphertext_add(tape.to_owned(), newCellContentGlwe,);
+    //result = bootstrap_glwe_LUT_with_actual_bootstrap(&result, &public_key, &ctx).0;
 
-    private_functional_keyswitch_lwe_ciphertext_list_and_pack_in_glwe_ciphertext(&public_key.pfpksk, &mut newCellContentGlwe, &new_cell_content_ciphertext_list);
-
-    let result = glwe_ciphertext_add(tape.to_owned(), newCellContentGlwe,);
     return result;
 }
 
@@ -211,11 +178,11 @@ pub fn change_head_position(
     blind_rotate_assign(&res, tape, &public_key.fourier_bsk);
     //tape.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
 
-    let result = private_key.decrypt_and_decode_glwe(&tape,&ctx);
-    println!("tape without bootstrap= {:?}",result);
+    // let result = private_key.decrypt_and_decode_glwe(&tape,&ctx);
+    // println!("tape without bootstrap= {:?}",result);
 
-    return bootstrap_glwe_LUT( tape,&public_key,&ctx).0;
-    //return tape.to_owned()
+    // return bootstrap_glwe_LUT( tape,&public_key,&ctx).0;
+    return tape.to_owned()
 }
 
 pub fn get_new_state(

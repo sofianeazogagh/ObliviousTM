@@ -382,7 +382,7 @@ pub fn bootstrap_glwe_LUT(glwe: &GlweCiphertext<Vec<u64>>, public_key:&PublicKey
     }
 
     let mut output = LUT::from_vec_of_lwe(input_vec,&public_key,&ctx);
-    output.0.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
+    output.0.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0+box_size/2))});
 
     output
 
@@ -405,4 +405,49 @@ pub fn LWEaddu64(lwe: &LweCiphertext<Vec<u64>>, constant: u64, mut ctx:&Context)
 
     lwe_ciphertext_add(&mut res,&constant_lwe,lwe);
     return res
+}
+
+
+pub fn bootstrap_glwe_LUT_with_actual_bootstrap(glwe: &GlweCiphertext<Vec<u64>>, public_key:&PublicKey, ctx :&Context) -> LUT {
+
+
+    let box_size = ctx.polynomial_size().0 / ctx.message_modulus().0;
+
+    // Create the accumulator
+    let mut input_vec : Vec<LweCiphertext<Vec<u64>>> = Vec::new();
+    let mut ct_small = LweCiphertext::new(0_64, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus(),);
+    let mut ct_big =LweCiphertext::new(0_64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus(),);
+
+    for i in 0..ctx.message_modulus().0 { //many_lwe.len()
+        let index = i * box_size;
+        extract_lwe_sample_from_glwe_ciphertext(&glwe, &mut ct_big, MonomialDegree(index));
+        keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &ct_big, &mut ct_small);
+
+        input_vec.push(ct_small.to_owned());
+    }
+
+    let accumulator: GlweCiphertextOwned<u64> = generate_accumulator(
+        ctx.polynomial_size(),
+        ctx.glwe_dimension().to_glwe_size(),
+        ctx.message_modulus().0 as usize,
+        ctx.delta(),
+        |x: u64| x,
+    );
+
+    let mut pbs_ct = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+    programmable_bootstrap_lwe_ciphertext(
+        &input_vec[0],
+        &mut pbs_ct,
+        &accumulator,
+        &public_key.fourier_bsk,
+    );
+    keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut pbs_ct, &mut input_vec[0]);
+
+
+    let mut output = LUT::from_vec_of_lwe(input_vec,&public_key,&ctx);
+    output.0.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0+box_size/2))});
+    // output.0.as_mut_polynomial_list().iter_mut().for_each(|mut poly|{polynomial_wrapping_monic_monomial_mul_assign(&mut poly,MonomialDegree(ctx.polynomial_size().0))});
+
+    output
+
 }
