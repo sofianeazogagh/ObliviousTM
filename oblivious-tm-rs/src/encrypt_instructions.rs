@@ -25,30 +25,16 @@ pub fn encrypt_instructions(
 }
 
 pub fn decrypt_instructions(
-    glwe_key:&GlweSecretKeyOwned<u64>,
-    delta:u64,
-    polynomial_size:PolynomialSize,
-    ciphertext:&mut Vec<GlweCiphertext<Vec<u64>>>
+    private_key:&PrivateKey,
+    ctx:& Context,
+    ciphertext:&Vec<LUT>
    )
 
 {
-    let cipher = ciphertext.into_iter().nth(0).unwrap();
-    let mut output_plaintext_list = PlaintextList::new(0, PlaintextCount(polynomial_size.0));
-    decrypt_glwe_ciphertext(&glwe_key, &cipher, &mut output_plaintext_list);
-
-    let signed_decomposer = SignedDecomposer::new(DecompositionBaseLog(4), DecompositionLevelCount(1));
-
-    output_plaintext_list
-        .iter_mut()
-        .for_each(|elt| *elt.0 = signed_decomposer.closest_representable(*elt.0));
-
-    // Get the raw vector
-    let mut cleartext_list = output_plaintext_list.into_container();
-    // Remove the encoding
-    cleartext_list.iter_mut().for_each(|elt| *elt = *elt /delta);
-    // Get the list immutably
-    let cleartext_list = cleartext_list;
-
-    // Check we recovered the original message for each plaintext we encrypted
-    println!("instructions {:?}", cleartext_list);
+    let mut result= Vec::new();
+    for i in ciphertext{
+        let res = i.print_lut(&private_key,&ctx);
+        result.push(res);
+    }
+    println!("instructions {:?}", result);
 }

@@ -77,8 +77,10 @@ impl Context {
         pub fn pbs_level(&self) -> DecompositionLevelCount { DecompositionLevelCount(1) }
     pub fn ks_level(&self) -> DecompositionLevelCount { DecompositionLevelCount(5) }
         pub fn ks_base_log(&self) -> DecompositionBaseLog { self.parameters.ks_base_log }
-        pub fn pfks_level(&self) -> DecompositionLevelCount { self.parameters.pbs_level }
-        pub fn pfks_base_log(&self) -> DecompositionBaseLog { self.parameters.pbs_base_log }
+        // pub fn pfks_level(&self) -> DecompositionLevelCount { self.parameters.pbs_level }
+    pub fn pfks_level(&self) -> DecompositionLevelCount { DecompositionLevelCount(1) }
+
+    pub fn pfks_base_log(&self) -> DecompositionBaseLog { self.parameters.pbs_base_log }
         // pub fn pfks_modular_std_dev(&self) -> StandardDev { self.parameters.glwe_modular_std_dev }
     pub fn pfks_modular_std_dev(&self) -> StandardDev { StandardDev(0.0) }
 
@@ -727,7 +729,7 @@ impl Context {
         pub fn print_lut(
             &self,
             private_key: &PrivateKey,
-            mut ctx: &mut Context,
+            mut ctx: &Context,
         ) -> Vec<u64>
         {
             let box_size = ctx.polynomial_size().0 / ctx.message_modulus().0;
@@ -739,7 +741,7 @@ impl Context {
             for i in 0..ctx.message_modulus().0 { //many_lwe.len()
                 let index = i * box_size;
                 extract_lwe_sample_from_glwe_ciphertext(&self.0, &mut ct_big, MonomialDegree(index));
-                input_vec.push(private_key.decrypt_lwe_big_key(&ct_big, &mut ctx));
+                input_vec.push(private_key.decrypt_lwe_big_key(&ct_big, &ctx));
             }
             return input_vec;
         }

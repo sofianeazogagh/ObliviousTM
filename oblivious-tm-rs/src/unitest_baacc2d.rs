@@ -13,6 +13,7 @@ use rayon::prelude::*;
 
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
+use crate::encrypt_instructions::decrypt_instructions;
 use crate::headers::{Context, LUT, PrivateKey, PublicKey};
 use crate::helpers::{encrypt_accumulator_as_glwe_ciphertext, generate_accumulator_via_vector, generate_accumulator_via_vector_of_ciphertext, LWEaddu64};
 
@@ -28,30 +29,58 @@ pub fn bacc2dLUT(
 )
     -> LweCiphertext<Vec<u64>>
 {
-    let lwe_line_encoded  = LWEaddu64(&lwe_line,ctx.full_message_modulus() as u64,&ctx);
+
+    // decrypt_instructions(private_key,&ctx,array2d);
+    let lwe_line_encoded  = LWEaddu64(&lwe_line,8 as u64,&ctx);
 
     let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
-    pbs_results.par_extend(
-        array2d
-            .into_par_iter()
-            .map(|acc| {
-                let mut pbs_ct = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
-                programmable_bootstrap_lwe_ciphertext(
-                    &lwe_column,
-                    &mut pbs_ct,
-                    &acc.0,
-                    &public_key.fourier_bsk,
-                );
-                let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
-                keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut pbs_ct, &mut switched);
-                switched
-            }),
-    );
+    // pbs_results.par_extend(
+    //     array2d
+    //         .into_par_iter()
+    //         .map(|acc| {
+    //             let mut pbs_ct = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+    //             programmable_bootstrap_lwe_ciphertext(
+    //                 &lwe_column,
+    //                 &mut pbs_ct,
+    //                 &acc.0,
+    //                 &public_key.fourier_bsk,
+    //             );
+    //             let result = private_key.decrypt_lwe_big_key(&pbs_ct,&ctx);
+    //             println!("pbs_ct = {result}");
+    //             let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+    //             keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut pbs_ct, &mut switched);
+    //             switched
+    //         }),
+    // );
+    for i in array2d{
+        let mut pbs_ct = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+
+        programmable_bootstrap_lwe_ciphertext(
+            &lwe_column,
+            &mut pbs_ct,
+            &i.0,
+            &public_key.fourier_bsk,
+        );
+
+        // let result = private_key.decrypt_lwe_big_key(&pbs_ct,&ctx);
+        // println!("pbs_ct = {result}");
+
+        let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
+        keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut pbs_ct, &mut switched);
+        pbs_results.push(switched);
+
+    }
 
 
     let accumulator_final = LUT::from_vec_of_lwe(pbs_results, public_key, ctx);
+    // let result = accumulator_final.print_lut(&private_key,&ctx);
+    // let result = private_key.decrypt_and_decode_glwe(&accumulator_final.0,&ctx);
+    // println!("acc = {result:?}");
     let mut ct_res = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
     programmable_bootstrap_lwe_ciphertext(&lwe_line_encoded, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
+    // programmable_bootstrap_lwe_ciphertext(&lwe_line, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
+
+
     ct_res
 }
 
