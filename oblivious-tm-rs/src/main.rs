@@ -30,7 +30,7 @@ use crate::blind_push::blind_push;
 use crate::blind_retrieve::blind_retrieve;
 use crate::headers::{Context, LUT, PrivateKey, PublicKey};
 use crate::helpers::{bootstrap_glwe_LUT, bootstrap_glwe_LUT_with_actual_bootstrap, generate_accumulator_via_vector, LWEaddu64, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
-use crate::OTM::{get_new_state, OTM, read_cell_content};
+use crate::OTM::{change_head_position, get_new_state, OTM, read_cell_content, write_new_cell_content};
 use crate::private_insert::private_insert;
 
 
@@ -45,9 +45,8 @@ pub fn main() {
     //
     // // println!("Key generated");
     // for j in 0..100 {
-    //     test_bacc(&mut ctx,&private_key,&public_key);
+    //     test_step(&mut ctx,&private_key,&public_key);
     //     println!("{j}");
-    //
     // }
 }
 
@@ -187,12 +186,12 @@ pub fn test_bacc(mut ctx:&mut Context, private_key:&PrivateKey, public_key:&Publ
     let cellContent =private_key.allocate_and_encrypt_lwe(2,&mut ctx);
     // let result = private_key.decrypt_lwe(&cellContent,&ctx);
     // println!("cellcontent {result}");
-    let mut state = private_key.allocate_and_encrypt_lwe (1, &mut ctx);
+    let mut state = private_key.allocate_and_encrypt_lwe (4, &mut ctx);
 
     let mut instruction_state = vec![
-        vec![0, 1, 2, 3, 0, 5, 6],
-        vec![0, 1, 3, 3, 4, 5, 6],
-        vec![1, 2, 5, 4, 0, 6, 6],
+        vec![0, 0, 1, 0, 1, 0, 0],
+        vec![0, 0, 7, 0, 7, 0, 0],
+        vec![0, 0, 0, 0, 1, 0, 0],
     ];
     // println!("tape = {:?}",instruction_state);
 
@@ -210,6 +209,64 @@ pub fn test_bacc(mut ctx:&mut Context, private_key:&PrivateKey, public_key:&Publ
     let result = private_key.decrypt_lwe_big_key(&statesortie,&ctx);
     println!("result bacc2d = {result}");
 }
+
+pub fn test_step(mut ctx:&mut Context, private_key:&PrivateKey, public_key:&PublicKey,){
+
+    // let result = private_key.decrypt_lwe(&cellContent,&ctx);
+    // println!("cellcontent {result}");
+
+    let mut instruction_write = vec![
+        vec![0, 0, 1, 0, 1, 0, 0],
+        vec![0, 0, 7, 0, 7, 0, 0],
+        vec![0, 0, 0, 0, 7, 0, 0],
+    ];
+
+    let mut instruction_position = vec![
+        vec![1, 1, 15, 15, 1, 1, 0],
+        vec![1, 1, 15, 15, 15, 1, 0],
+        vec![1, 15, 1, 15, 1, 1, 0],
+    ];
+
+    let mut instruction_state = vec![
+        vec![0, 1, 2, 3, 0, 5, 6],
+        vec![0, 1, 3, 3, 4, 5, 6],
+        vec![1, 2, 5, 4, 0, 6, 6],
+    ];
+
+    let instruction_write = encrypt_instructions(&mut ctx, &private_key, instruction_write);
+    let instruction_position = encrypt_instructions(&mut ctx, &private_key, instruction_position);
+    let instruction_state = encrypt_instructions(&mut ctx, &private_key, instruction_state);
+
+
+    let mut tape = vec![1, 2, 0, 2, 6, 6, 6, 6];
+
+    let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
+    let mut state = private_key.allocate_and_encrypt_lwe (4, &mut ctx);
+    let mut cellContent = read_cell_content(&mut tape.0, &public_key, &ctx);
+
+    state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
+    let current_state = private_key.decrypt_lwe(&state,&ctx);
+    println!("state = {}", current_state);
+
+    let mut tape = vec![2, 0, 2, 0, 2, 6, 6, 6];
+
+    let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
+
+
+    let mut cellContent = read_cell_content(&mut tape.0, &public_key, &ctx);
+    let current_cell = private_key.decrypt_lwe(&cellContent,&ctx);
+    println!("cellContent = {}", current_cell);
+
+    tape.0 = write_new_cell_content(&mut tape.0, cellContent.clone(), state.clone(),&instruction_write, &public_key, &mut ctx, &private_key);
+    tape.0 = change_head_position(&mut tape.0, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
+    state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
+    let current_state = private_key.decrypt_lwe(&state,&ctx);
+    println!("state = {}", current_state);
+
+    let result = tape.print_lut(&private_key,&mut ctx);
+    println!("result bacc2d = {result:?}");
+}
+
 
 
 

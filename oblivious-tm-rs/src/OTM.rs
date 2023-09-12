@@ -38,7 +38,7 @@ pub fn OTM() {
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![1_u64, 2, 1];
+    let mut tape = vec![1_u64, 2, 1,2];
     while tape.len() < ctx.message_modulus().0 {
         tape.push(6_u64);
     }
@@ -59,7 +59,7 @@ pub fn OTM() {
     let mut instruction_write = vec![
         vec![0, 0, 1, 0, 1, 0, 0],
         vec![0, 0, 7, 0, 7, 0, 0],
-        vec![0, 0, 0, 0, 7, 0, 0],
+        vec![0, 0, 0, 0, 1, 0, 0],
     ];
 
     let mut instruction_position = vec![
@@ -74,7 +74,7 @@ pub fn OTM() {
         vec![1, 2, 5, 4, 0, 6, 6],
     ];
 
-    instruction_write = negacycle_vector(instruction_write, &mut ctx);
+    // instruction_write = negacycle_vector(instruction_write, &mut ctx);
     //instruction_position = negacycle_vector(instruction_position, &mut ctx);
     //instruction_state = negacycle_vector(instruction_state, &mut ctx);
 
@@ -96,7 +96,7 @@ pub fn OTM() {
         let current_cell = private_key.decrypt_lwe(&cellContent,&ctx);
         println!("cellContent = {}", current_cell);
 
-        tape.0 = write_new_cell_content(&mut tape.0, cellContent.clone(), state.clone(),&instruction_write, &public_key, &ctx, &private_key);
+        tape.0 = write_new_cell_content(&mut tape.0, cellContent.clone(), state.clone(),&instruction_write, &public_key, &mut ctx, &private_key);
         tape.0 = change_head_position(&mut tape.0, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
         state = get_new_state(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
         let current_state = private_key.decrypt_lwe(&state,&ctx);
@@ -125,7 +125,7 @@ pub fn write_new_cell_content(
     state: LweCiphertext<Vec<u64>>,
     instruction_write: &Vec<LUT>,
     public_key: &PublicKey,
-    ctx: &Context,
+    mut ctx: &mut Context,
     private_key: &PrivateKey,
 ) -> GlweCiphertext<Vec<u64>>
 {
@@ -144,8 +144,18 @@ pub fn write_new_cell_content(
 
     let mut newCellContentGlwe = LUT::from_lwe(&switched,&public_key,&ctx).0;
 
-    let mut result = glwe_ciphertext_add(tape.to_owned(), newCellContentGlwe,);
+    let mut result = glwe_ciphertext_add(tape.to_owned(), newCellContentGlwe.to_owned(),);
     //result = bootstrap_glwe_LUT_with_actual_bootstrap(&result, &public_key, &ctx).0;
+
+    let newcell_add = private_key.decrypt_lwe(&switched,&ctx);
+    println!("write add = {}", newcell_add);
+
+    // let test = LUT(newCellContentGlwe.clone()).print_lut(&private_key,&mut ctx);
+    // println!("write add glwe = {:?}\n\n",test);
+    //
+    // let test = private_key.decrypt_and_decode_glwe(&newCellContentGlwe.clone(),&ctx);
+    // println!("write add glwe complet = {:?}\n\n",test);
+
 
     return result;
 }
@@ -182,6 +192,10 @@ pub fn change_head_position(
     // println!("tape without bootstrap= {:?}",result);
 
     // return bootstrap_glwe_LUT( tape,&public_key,&ctx).0;
+
+    let res = private_key.decrypt_lwe(&res,&ctx);
+    println!("test move = {}", res);
+
     return tape.to_owned()
 }
 

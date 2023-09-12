@@ -669,7 +669,7 @@ impl Context {
                 &lwe_ciphertext_list,
             );
 
-            let poly_monomial_degree = MonomialDegree(2 * ctx.polynomial_size().0);
+            let poly_monomial_degree = MonomialDegree(1 * ctx.polynomial_size().0-half_box);
             public_key.glwe_absorption_monic_monomial(&mut glwe, poly_monomial_degree);
 
             LUT(glwe)
