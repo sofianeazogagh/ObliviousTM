@@ -74,7 +74,7 @@ pub fn OTM() {
         vec![1, 2, 5, 4, 0, 6, 6],
     ];
 
-    //instruction_write = negacycle_vector(instruction_write, &mut ctx);
+    instruction_write = negacycle_vector(instruction_write, &mut ctx);
     //instruction_position = negacycle_vector(instruction_position, &mut ctx);
     //instruction_state = negacycle_vector(instruction_state, &mut ctx);
 

@@ -35,20 +35,20 @@ use crate::private_insert::private_insert;
 
 
 pub fn main() {
-    // OTM()
-    let param = PARAM_MESSAGE_3_CARRY_0_KS_PBS;
-    let mut ctx = Context::from(param);
-
-    let private_key = PrivateKey::new(&mut ctx);
-    let public_key = private_key.get_public_key();
-
-
-    // println!("Key generated");
-    for j in 0..100 {
-        test_bacc(&mut ctx,&private_key,&public_key);
-        println!("{j}");
-
-    }
+    OTM()
+    // let param = PARAM_MESSAGE_3_CARRY_0_KS_PBS;
+    // let mut ctx = Context::from(param);
+    //
+    // let private_key = PrivateKey::new(&mut ctx);
+    // let public_key = private_key.get_public_key();
+    //
+    //
+    // // println!("Key generated");
+    // for j in 0..100 {
+    //     test_bacc(&mut ctx,&private_key,&public_key);
+    //     println!("{j}");
+    //
+    // }
 }
 
 pub fn test_write() {
