@@ -1,0 +1,3 @@
+[submodule "oblivious-tm-rs/revoLUT"]
+	path = oblivious-tm-rs/revoLUT
+	url = git@github.com:sofianeazogagh/revoLUT.git
