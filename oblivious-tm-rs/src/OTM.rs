@@ -38,7 +38,7 @@ pub fn OTM() {
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![1_u64, 2, 1,2];
+    let mut tape = vec![0_u64, 2, 1,2];
     while tape.len() < ctx.message_modulus().0 {
         tape.push(6_u64);
     }

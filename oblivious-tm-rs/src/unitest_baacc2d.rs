@@ -32,6 +32,8 @@ pub fn bacc2dLUT(
 
     // decrypt_instructions(private_key,&ctx,array2d);
     let lwe_line_encoded  = LWEaddu64(&lwe_line,8 as u64,&ctx);
+    // let lwe_column_encoded  = LWEaddu64(&lwe_column,8 as u64,&ctx);
+
 
     let mut pbs_results: Vec<LweCiphertext<Vec<u64>>> = Vec::new();
     // pbs_results.par_extend(
@@ -62,20 +64,29 @@ pub fn bacc2dLUT(
             &public_key.fourier_bsk,
         );
 
-        // let result = private_key.decrypt_lwe_big_key(&pbs_ct,&ctx);
-        // println!("pbs_ct = {result}");
+        // programmable_bootstrap_lwe_ciphertext(
+        //     &lwe_column_encoded,
+        //     &mut pbs_ct,
+        //     &i.0,
+        //     &public_key.fourier_bsk,
+        // );
+
+        let result = private_key.decrypt_lwe_big_key(&pbs_ct,&ctx);
+        println!("pbs_ct = {result}");
 
         let mut switched = LweCiphertext::new(0, ctx.small_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
         keyswitch_lwe_ciphertext(&public_key.lwe_ksk, &mut pbs_ct, &mut switched);
+        // let result = private_key.decrypt_lwe(&switched,&ctx);
+        // println!("pbs_ct switched = {result}");
         pbs_results.push(switched);
 
     }
 
 
     let accumulator_final = LUT::from_vec_of_lwe(pbs_results, public_key, ctx);
-    // let result = accumulator_final.print_lut(&private_key,&ctx);
+    let result = accumulator_final.print_lut(&private_key,&ctx);
     // let result = private_key.decrypt_and_decode_glwe(&accumulator_final.0,&ctx);
-    // println!("acc = {result:?}");
+    println!("acc = {result:?}\n");
     let mut ct_res = LweCiphertext::new(0u64, ctx.big_lwe_dimension().to_lwe_size(),ctx.ciphertext_modulus());
     programmable_bootstrap_lwe_ciphertext(&lwe_line_encoded, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
     // programmable_bootstrap_lwe_ciphertext(&lwe_line, &mut ct_res, &accumulator_final.0, &public_key.fourier_bsk,);
