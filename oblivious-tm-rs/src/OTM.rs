@@ -38,13 +38,14 @@ pub fn OTM() {
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![0_u64, 2, 1,2];
+    let mut tape = vec![1_u64, 2, 1,2];
     while tape.len() < ctx.message_modulus().0 {
-        tape.push(6_u64);
+        tape.insert(0,2_u64);
     }
     println!("{:?}", tape);
 
     let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
+    public_key.glwe_absorption_monic_monomial(&mut tape.0, MonomialDegree(12*ctx.box_size() as usize));
 
     // let accumulator_u64 = generate_accumulator_via_vector(ctx.polynomial_size(), ctx.message_modulus().0, ctx.delta(), tape);
     // let pt = PlaintextList::from_container(accumulator_u64);
@@ -59,7 +60,7 @@ pub fn OTM() {
     let mut instruction_write = vec![
         vec![0, 0, 1, 0, 1, 0, 0],
         vec![0, 0, 7, 0, 7, 0, 0],
-        vec![0, 0, 0, 0, 1, 0, 0],
+        vec![0, 0, 0, 0, 7, 0, 0],
     ];
 
     let mut instruction_position = vec![
