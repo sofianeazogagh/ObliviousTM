@@ -41,112 +41,21 @@ use crate::helpers::{bootstrap_glwe_LUT, bootstrap_glwe_LUT_with_actual_bootstra
 
 pub fn main() {
     //OTM_test();
+
     let mut tape = vec![1_u64, 2, 3,4,5,6,7,7];
 
     let  instruction_write = vec![
-        vec![0, ],
+        vec![1, ],
     ];
     let  instruction_position = vec![
-        vec![0, ],
-    ];
+        vec![0,],
+       ];
 
     let  instruction_state = vec![
         vec![0, ],
     ];
-     OTM_test(tape, instruction_write, instruction_position, instruction_state);
+     OTM_test( 0, tape, instruction_write, instruction_position, instruction_state);
 }
-
-/* Tout OTM mais dans le main */
-// pub fn OTM_test() {
-//     /**************** Client part *****************/
-//
-//     //Choix des params et création de clés
-//     let param = PARAM_MESSAGE_3_CARRY_0;
-//     let mut ctx = Context::from(param);
-//
-//     let private_key = PrivateKey::new(&mut ctx);
-//     let public_key = private_key.get_public_key();
-//
-//     println!("Key generated");
-//
-//     //creation de la bande, toujours ajouter un 2 à la fin quand tu déclares une bande.
-//     let mut tape = vec![1_u64, 2, 1,2];
-//     let lenght = tape.len();
-//     while tape.len() < ctx.message_modulus().0 {
-//         tape.insert(0,2_u64);
-//     }
-//     println!("{:?}", tape);
-//
-//     let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
-//     public_key.glwe_absorption_monic_monomial(&mut tape.0, MonomialDegree((ctx.polynomial_size().0+lenght*ctx.box_size()) as usize));
-//
-//     //création de l'état
-//     let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
-//
-//     //création des instructions
-//     println!("State Encrypted");
-//     let mut instruction_write = vec![
-//         vec![0, 0, 1, 0, 1, 0, 0],
-//         vec![0, 0, 7, 0, 7, 0, 0],
-//         vec![0, 0, 0, 0, 7, 0, 0],
-//     ];
-//     //Ici les 7 sont chiffrés comme des 15 pour des problèmes de négacyclicité dans la rotation de la bande
-//     let mut instruction_position = vec![
-//         vec![1, 1, 15, 15, 1, 1, 0],
-//         vec![1, 1, 15, 15, 15, 1, 0],
-//         vec![1, 15, 1, 15, 1, 1, 0],
-//     ];
-//
-//     let mut instruction_state = vec![
-//         vec![0, 1, 2, 3, 0, 5, 6],
-//         vec![0, 1, 3, 3, 4, 5, 6],
-//         vec![1, 2, 5, 4, 0, 6, 6],
-//     ];
-//
-//     let instruction_write = encrypt_instructions(&mut ctx, &private_key, instruction_write);
-//     let instruction_position = encrypt_instructions(&mut ctx, &private_key, instruction_position);
-//     let instruction_state = encrypt_instructions(&mut ctx, &private_key, instruction_state);
-//     println!("Instructions Encrypted");
-//
-//
-//     /**************** Server part *****************/
-//
-//     //The number of steps our Turing Machine will run.
-//     let step = 40;
-//
-//     for i in 0..step {
-//
-//         println!("\n step = {i}");
-//
-//         // Bande au début du step
-//         let result = tape.print_lut(&private_key,&mut ctx);
-//         println!("tape = {:?}",result);
-//
-//         //lecture sur la bande du contenu de la première cellule
-//         let cellContent = read_cell_content_test(&mut tape.0, &public_key,&private_key, &ctx);
-//
-//         /*
-//         cellContent : ligne
-//         state : colonne
-//          */
-//
-//
-//         //affichage de la première cellule et de l'état
-//         let current_cell = private_key.decrypt_lwe(&cellContent,&ctx);
-//         println!("cellContent = {}", current_cell);
-//         let current_state = private_key.decrypt_lwe(&state.to_owned(),&ctx);
-//         println!("state = {}", current_state);
-//
-//
-//         // écriture sur la bande
-//         tape.0 = write_new_cell_content_test(&mut tape.0, cellContent.clone(), state.clone(),&instruction_write, &public_key, &mut ctx, &private_key);
-//         // rotation de la bande
-//         tape.0 = change_head_position_test(&mut tape.0, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
-//         // màj de l'état
-//         state = get_new_state_test(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
-//
-//     }
-// }
 
 pub fn read_cell_content_test(
     tape: &mut GlweCiphertext<Vec<u64>>,
@@ -288,6 +197,7 @@ pub fn get_new_state_test(
 }
 
 pub fn OTM_test(
+    init_state: u64,
     tape: Vec<u64>,
     instruction_write: Vec<Vec<u64>>,
     instruction_position: Vec<Vec<u64>>,
@@ -310,10 +220,8 @@ pub fn OTM_test(
     let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
     public_key.glwe_absorption_monic_monomial(&mut tape.0, MonomialDegree((ctx.polynomial_size().0+lenght*ctx.box_size()) as usize));
 
-    //création de l'état
-    let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
-
     //création des instructions
+    let mut state = private_key.allocate_and_encrypt_lwe(init_state, &mut ctx);
     println!("State Encrypted");
 
 
@@ -353,3 +261,95 @@ pub fn OTM_test(
     }
 }
 
+
+/* Tout OTM mais dans le main */
+// pub fn OTM_test() {
+//     /**************** Client part *****************/
+//
+//     //Choix des params et création de clés
+//     let param = PARAM_MESSAGE_3_CARRY_0;
+//     let mut ctx = Context::from(param);
+//
+//     let private_key = PrivateKey::new(&mut ctx);
+//     let public_key = private_key.get_public_key();
+//
+//     println!("Key generated");
+//
+//     //creation de la bande, toujours ajouter un 2 à la fin quand tu déclares une bande.
+//     let mut tape = vec![1_u64, 2, 1,2];
+//     let lenght = tape.len();
+//     while tape.len() < ctx.message_modulus().0 {
+//         tape.insert(0,2_u64);
+//     }
+//     println!("{:?}", tape);
+//
+//     let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
+//     public_key.glwe_absorption_monic_monomial(&mut tape.0, MonomialDegree((ctx.polynomial_size().0+lenght*ctx.box_size()) as usize));
+//
+//     //création de l'état
+//     let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
+//
+//     //création des instructions
+//     println!("State Encrypted");
+//     let mut instruction_write = vec![
+//         vec![0, 0, 1, 0, 1, 0, 0],
+//         vec![0, 0, 7, 0, 7, 0, 0],
+//         vec![0, 0, 0, 0, 7, 0, 0],
+//     ];
+//     //Ici les 7 sont chiffrés comme des 15 pour des problèmes de négacyclicité dans la rotation de la bande
+//     let mut instruction_position = vec![
+//         vec![1, 1, 15, 15, 1, 1, 0],
+//         vec![1, 1, 15, 15, 15, 1, 0],
+//         vec![1, 15, 1, 15, 1, 1, 0],
+//     ];
+//
+//     let mut instruction_state = vec![
+//         vec![0, 1, 2, 3, 0, 5, 6],
+//         vec![0, 1, 3, 3, 4, 5, 6],
+//         vec![1, 2, 5, 4, 0, 6, 6],
+//     ];
+//
+//     let instruction_write = encrypt_instructions(&mut ctx, &private_key, instruction_write);
+//     let instruction_position = encrypt_instructions(&mut ctx, &private_key, instruction_position);
+//     let instruction_state = encrypt_instructions(&mut ctx, &private_key, instruction_state);
+//     println!("Instructions Encrypted");
+//
+//
+//     /**************** Server part *****************/
+//
+//     //The number of steps our Turing Machine will run.
+//     let step = 40;
+//
+//     for i in 0..step {
+//
+//         println!("\n step = {i}");
+//
+//         // Bande au début du step
+//         let result = tape.print_lut(&private_key,&mut ctx);
+//         println!("tape = {:?}",result);
+//
+//         //lecture sur la bande du contenu de la première cellule
+//         let cellContent = read_cell_content_test(&mut tape.0, &public_key,&private_key, &ctx);
+//
+//         /*
+//         cellContent : ligne
+//         state : colonne
+//          */
+//
+//
+//         //affichage de la première cellule et de l'état
+//         let current_cell = private_key.decrypt_lwe(&cellContent,&ctx);
+//         println!("cellContent = {}", current_cell);
+//         let current_state = private_key.decrypt_lwe(&state.to_owned(),&ctx);
+//         println!("state = {}", current_state);
+//
+//
+//         // écriture sur la bande
+//         tape.0 = write_new_cell_content_test(&mut tape.0, cellContent.clone(), state.clone(),&instruction_write, &public_key, &mut ctx, &private_key);
+//         // rotation de la bande
+//         tape.0 = change_head_position_test(&mut tape.0, cellContent.clone(), state.clone(), &instruction_position, &public_key, &ctx, &private_key);
+//         // màj de l'état
+//         state = get_new_state_test(cellContent.clone(), state.clone(), &instruction_state, &public_key, &ctx, &private_key);
+//
+//     }
+// }
