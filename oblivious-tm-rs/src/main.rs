@@ -34,7 +34,7 @@
 // use crate::private_insert::private_insert;
 
 
-use revoLUT::{Context,PrivateKey,PublicKey,LUT,LUTStack};
+use revolut::{Context,PrivateKey,PublicKey,LUT,LUTStack};
 use tfhe::shortint::parameters::PARAM_MESSAGE_4_CARRY_0;
 
 
@@ -52,15 +52,44 @@ pub fn main() {
     //     test_step(&mut ctx,&private_key,&public_key);
     //     println!("{j}");
     // }
+        // let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
+        // let private_key = PrivateKey::new(&mut ctx);
+        // let public_key = private_key.get_public_key();
+        // let input : u64 = 3;
+        // let mut lwe = private_key.allocate_and_encrypt_lwe(input, &mut ctx);
+        // public_key.wrapping_neg_lwe(&mut lwe);
+        // let clear = private_key.decrypt_lwe(&lwe, &mut ctx);
         let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
         let private_key = PrivateKey::new(&mut ctx);
         let public_key = private_key.get_public_key();
-        let input : u64 = 3;
-        let mut lwe = private_key.allocate_and_encrypt_lwe(input, &mut ctx);
-        public_key.wrapping_neg_lwe(&mut lwe);
-        let clear = private_key.decrypt_lwe(&lwe, &mut ctx);
-        println!("Test encryption-decryption");
-        println!("neg_lwe = {}", clear);
+        
+        let matrix : Vec<Vec<u64>> = vec![
+            vec![0,1,2,3,0,1,2,3],
+            vec![4,5,6,7,4,5,6,7],
+            vec![8,9,10,11,8,9,10,11],
+            vec![12,13,14,15,12,13,14,15],
+            vec![0,1,2,3,0,1,2,3],
+            vec![4,5,6,7,4,5,6,7],
+            vec![8,9,10,11,8,9,10,11],
+            vec![12,13,14,15,12,13,14,15]
+        ];
+
+
+        let mut matrix_lut: Vec<LUT> = Vec::new();
+        for f in matrix {
+            let lut = LUT::from_vec(&f, &private_key, &mut ctx);
+            matrix_lut.push(lut);
+        }
+
+        let column = 2;
+        let line = 5;
+
+        let index_column = private_key.allocate_and_encrypt_lwe(column, &mut ctx);
+        let index_line = private_key.allocate_and_encrypt_lwe(line, &mut ctx);
+        let ct_res = public_key.blind_matrix_access(&matrix_lut, &index_line, &index_column, &ctx);
+
+        let res = private_key.decrypt_lwe(&ct_res, &ctx);
+        println!("Got {}", res);
         // assert_eq!(input,16-clear);
     
 }

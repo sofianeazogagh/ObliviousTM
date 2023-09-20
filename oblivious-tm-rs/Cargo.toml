@@ -17,7 +17,7 @@ concrete-csprng = "0.3.0"
 dyn-stack = "0.9.0"
 itertools = "0.10.5"
 concrete-fft = "0.2.1"
-revoLUT = { git = "https://github.com/sofianeazogagh/revoLUT.git", branch = "main" }
+revolut = { git = "https://github.com/sofianeazogagh/revoLUT.git", branch = "main" }
 
 
 # [dev-dependencies]
