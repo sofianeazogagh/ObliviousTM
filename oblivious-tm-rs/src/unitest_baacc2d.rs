@@ -31,7 +31,8 @@ pub fn bacc2dLUT(
 {
 
     // decrypt_instructions(private_key,&ctx,array2d);
-    let lwe_line_encoded  = LWEaddu64(&lwe_line,8 as u64,&ctx);
+    //let lwe_line_encoded  = LWEaddu64(&lwe_line,8 as u64,&ctx);
+    let lwe_line_encoded  = LWEaddu64(&lwe_line,ctx.message_modulus().0 as u64,&ctx);
     // let lwe_column_encoded  = LWEaddu64(&lwe_column,8 as u64,&ctx);
 
 
