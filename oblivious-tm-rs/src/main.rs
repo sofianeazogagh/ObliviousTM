@@ -30,16 +30,21 @@
 // use crate::blind_retrieve::blind_retrieve;
 // use crate::headers::{Context, LUT, PrivateKey, PublicKey};
 // use crate::helpers::{bootstrap_glwe_LUT, bootstrap_glwe_LUT_with_actual_bootstrap, generate_accumulator_via_vector, LWEaddu64, negacycle_vector, one_lwe_to_lwe_ciphertext_list};
-// use crate::OTM::{change_head_position, get_new_state, OTM, read_cell_content, write_new_cell_content};
 // use crate::private_insert::private_insert;
 
 
-use revolut::{Context,PrivateKey,PublicKey,LUT,LUTStack};
-use tfhe::shortint::parameters::PARAM_MESSAGE_4_CARRY_0;
+// use revolut::{Context,PrivateKey,PublicKey,LUT,LUTStack};
+// use tfhe::shortint::parameters::PARAM_MESSAGE_4_CARRY_0;
+// use crate::OTM::{change_head_position, get_new_state, OTM, read_cell_content, write_new_cell_content};
+
+
+mod oblivious_tm;
+use oblivious_tm::*;
 
 
 pub fn main() {
-    // OTM()
+
+    // OTM();
     // let param = PARAM_MESSAGE_3_CARRY_0_KS_PBS;
     // let mut ctx = Context::from(param);
     //
@@ -59,38 +64,10 @@ pub fn main() {
         // let mut lwe = private_key.allocate_and_encrypt_lwe(input, &mut ctx);
         // public_key.wrapping_neg_lwe(&mut lwe);
         // let clear = private_key.decrypt_lwe(&lwe, &mut ctx);
-        let mut ctx = Context::from(PARAM_MESSAGE_4_CARRY_0);
-        let private_key = PrivateKey::new(&mut ctx);
-        let public_key = private_key.get_public_key();
-        
-        let matrix : Vec<Vec<u64>> = vec![
-            vec![0,1,2,3,0,1,2,3],
-            vec![4,5,6,7,4,5,6,7],
-            vec![8,9,10,11,8,9,10,11],
-            vec![12,13,14,15,12,13,14,15],
-            vec![0,1,2,3,0,1,2,3],
-            vec![4,5,6,7,4,5,6,7],
-            vec![8,9,10,11,8,9,10,11],
-            vec![12,13,14,15,12,13,14,15]
-        ];
-
-
-        let mut matrix_lut: Vec<LUT> = Vec::new();
-        for f in matrix {
-            let lut = LUT::from_vec(&f, &private_key, &mut ctx);
-            matrix_lut.push(lut);
-        }
-
-        let column = 2;
-        let line = 5;
-
-        let index_column = private_key.allocate_and_encrypt_lwe(column, &mut ctx);
-        let index_line = private_key.allocate_and_encrypt_lwe(line, &mut ctx);
-        let ct_res = public_key.blind_matrix_access(&matrix_lut, &index_line, &index_column, &ctx);
-
-        let res = private_key.decrypt_lwe(&ct_res, &ctx);
-        println!("Got {}", res);
         // assert_eq!(input,16-clear);
+
+    oblivious_tm(); // from oblivious_tm.rs
+    
     
 }
 

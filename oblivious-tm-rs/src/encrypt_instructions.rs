@@ -17,8 +17,6 @@ pub fn encrypt_instructions(
     let mut accumulators = Vec::new();
     for f in instructions.clone(){
         let array = LUT::from_vec(&f,&private_key,&mut ctx);
-
-
         accumulators.push(array);
     }
   return accumulators
