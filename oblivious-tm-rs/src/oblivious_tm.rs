@@ -1,5 +1,5 @@
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 use revolut::*;
 use tfhe::shortint::parameters::*;
@@ -12,7 +12,7 @@ pub fn oblivious_tm()
     //The number of steps our Turing Machine will run.
 
     let step = 7;
-    let param = PARAM_MESSAGE_4_CARRY_0;
+    let param = PARAM_MESSAGE_3_CARRY_0;
     let mut ctx = Context::from(param);
     let private_key = PrivateKey::new(&mut ctx);
     let public_key = private_key.get_public_key();
@@ -20,31 +20,25 @@ pub fn oblivious_tm()
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![0,0,0,0];
+    let mut tape = vec![1,0,1,0];
     while tape.len() < ctx.message_modulus().0 {
         tape.push(2_u64);
     }
     println!("Tape : {:?}", tape);
     let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
-    tape.print(&private_key, &ctx);
-
-    print!("Tape Encrypted");
+    println!("Tape Encrypted");
 
     let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
     println!("State Encrypted");
 
 
-
-
-    // POUR FAIRE QUE LA BANDE TOURNE À GAUCHE IL FAUT METTRE 2*FULL_MOD - ROTATE_LEFT ? donc 31 dans le cas 4_0  
-
-
-    // //// Multiplication par 2
-    // let instruction_write = vec![
-    //     vec![0,0,2], // pourquoi qd je lis 1 je fais 1 + 1 pour avoir 0 ? parce que je lis 15 (-1) et pas 1 donc il faut faire 15 + 1 = 16 = 0
-    //     vec![0,0,0]
+    // println!("---------------  MUTIPLICATION BY 2 ---------------");
+    // let mut instruction_write = vec![
+    //     vec![0,1,0], 
+    //     vec![0,1,2]
 
     // ];
+    // encode_instruction_write(&mut instruction_write, &ctx);
     // let instruction_position = vec![ // mouvement de la tête à gauche = mouvement de la bande à droite = rotation de 31
     //     vec![1,1,0], // mouvement de la tête à droite = mouvement de la bande à gauche = rotation de 1
     //     vec![0,0,0]
@@ -55,43 +49,43 @@ pub fn oblivious_tm()
     // ];
 
 
-
-
-
-    // //// soustraire 1 
-    // let instruction_write = vec![
-    //     vec![0,0,0], // pourquoi qd je lis 1 je fais 1 + 1 pour avoir 0 ? parce que je lis 15 (-1) et pas 1 donc il faut faire 15 + 1 = 16 = 0
-    //     vec![15,1,0],
-    //     vec![0,0,0]
-
+    // println!("---------------  INVERSE 0 and 1 ---------------");
+    // let mut instruction_write = vec![ 
+    //     vec![1,0,2],
+    //     vec![0,1,2],
+    //     vec![0,1,2]
     // ];
-    // let instruction_position = vec![ // mouvement de la tête à gauche = mouvement de la bande à droite = rotation de 31
-    //     vec![1,1,31], // mouvement de la tête à droite = mouvement de la bande à gauche = rotation de 1
-    //     vec![31,31,31],
+    // encode_instruction_write(&mut instruction_write, &ctx);
+    // let instruction_position = vec![
+    //     vec![1,1,0],
+    //     vec![0,0,0],
     //     vec![0,0,0]
     // ];
     // let instruction_state = vec![
     //     vec![0,0,1],
-    //     vec![1,2,2],
+    //     vec![1,1,1],
     //     vec![2,2,2]
     // ];
 
 
+    println!("--------------- SOUSTRAIRE 1 ---------------");
+    let mut instruction_write = vec![
+        vec![0,1,2], 
+        vec![1,0,2],
+        vec![0,1,2]
+    ];
+    encode_instruction_write(&mut instruction_write, &ctx);
 
-    //// inverser 0 et 1 
-    let instruction_write = vec![ // pourquoi qd je lis 0 je fais 0 + 15 pour avoir 0 ? parce que je lis 0 et je veux ecrire 1  donc 0 + 15 = -1 = 1
-        vec![15,1,0], // qd je lis 1 je fais 1 + 1 pour avoir 0, parce que je lis 15 (=-1) et pas 1 donc il faut faire 15 + 1 = 16 = 0
-        vec![0,0,0],
-        vec![0,0,0]
+    let instruction_position = vec![ 
+        vec!['D','D','G'], 
+        vec!['G','G','G'],
+        vec!['N','N','N']
     ];
-    let instruction_position = vec![
-        vec![1,1,0],
-        vec![0,0,0],
-        vec![0,0,0]
-    ];
+    let instruction_position = encode_instruction_position(&instruction_position, &ctx);
+
     let instruction_state = vec![
         vec![0,0,1],
-        vec![1,1,1],
+        vec![1,2,2],
         vec![2,2,2]
     ];
 
@@ -219,3 +213,64 @@ pub fn get_new_state(
     return new_state
 }
 
+
+
+
+/// Encode the matrix instruction_write appropriatly
+fn encode_instruction_write(
+    instruction_write : &mut Vec<Vec<u64>>,
+    ctx: &Context
+)
+{
+    let rows = instruction_write.len();
+
+    for i in 0..rows {
+        // Lis 0
+        match instruction_write[i][0] {
+            0 => instruction_write[i][0] = 0,
+            1 => instruction_write[i][0] = (ctx.message_modulus().0 - 1) as u64,
+            2 => instruction_write[i][0] = (ctx.message_modulus().0 - 2) as u64,
+            _ => (),
+        }
+        // Lis 1
+        match instruction_write[i][1] {
+            0 => instruction_write[i][1] = 1,
+            1 => instruction_write[i][1] = 0,
+            2 => instruction_write[i][1] = (ctx.message_modulus().0 - 1) as u64,
+            _ => (),
+        }
+
+        // Lis 2
+        match instruction_write[i][2] {
+            0 => instruction_write[i][2] = 2,
+            1 => instruction_write[i][2] = 3,
+            2 => instruction_write[i][2] = 0,
+            _ => (),
+        }
+    }
+}
+
+
+
+
+fn encode_instruction_position(
+    instruction_position: &Vec<Vec<char>>,
+    ctx: &Context
+) -> Vec<Vec<u64>> 
+{
+    let encoded_matrix: Vec<Vec<u64>> = instruction_position
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&col| match col {
+                    'D' => 1,
+                    'G' => (2*ctx.message_modulus().0 - 1) as u64,
+                    'N' => 0,
+                    _ => unreachable!(), // Ce cas ne devrait pas se produire si votre matrice ne contient que 'D', 'G' et 'N'
+                })
+                .collect()
+        })
+        .collect();
+
+    encoded_matrix
+}
