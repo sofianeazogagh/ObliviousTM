@@ -1,5 +1,5 @@
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 use revolut::*;
 use tfhe::shortint::parameters::*;
@@ -12,7 +12,7 @@ pub fn oblivious_tm()
     //The number of steps our Turing Machine will run.
 
     let step = 7;
-    let param = PARAM_MESSAGE_3_CARRY_0;
+    let param = PARAM_MESSAGE_4_CARRY_0;
     let mut ctx = Context::from(param);
     let private_key = PrivateKey::new(&mut ctx);
     let public_key = private_key.get_public_key();
@@ -20,7 +20,7 @@ pub fn oblivious_tm()
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![1,0,1,0];
+    let mut tape = vec![1,0,1,0,1,1];
     while tape.len() < ctx.message_modulus().0 {
         tape.push(2_u64);
     }
@@ -49,45 +49,46 @@ pub fn oblivious_tm()
     // ];
 
 
-    // println!("---------------  INVERSE 0 and 1 ---------------");
-    // let mut instruction_write = vec![ 
-    //     vec![1,0,2],
-    //     vec![0,1,2],
-    //     vec![0,1,2]
-    // ];
-    // encode_instruction_write(&mut instruction_write, &ctx);
-    // let instruction_position = vec![
-    //     vec![1,1,0],
-    //     vec![0,0,0],
-    //     vec![0,0,0]
-    // ];
-    // let instruction_state = vec![
-    //     vec![0,0,1],
-    //     vec![1,1,1],
-    //     vec![2,2,2]
-    // ];
-
-
-    println!("--------------- SOUSTRAIRE 1 ---------------");
-    let mut instruction_write = vec![
-        vec![0,1,2], 
+    println!("---------------  INVERSE 0 and 1 ---------------");
+    let mut instruction_write = vec![ 
         vec![1,0,2],
+        vec![0,1,2],
         vec![0,1,2]
     ];
     encode_instruction_write(&mut instruction_write, &ctx);
-
-    let instruction_position = vec![ 
-        vec!['D','D','G'], 
-        vec!['G','G','G'],
+    let instruction_position = vec![
+        vec!['D','D','N'],
+        vec!['N','N','N'],
         vec!['N','N','N']
     ];
     let instruction_position = encode_instruction_position(&instruction_position, &ctx);
-
     let instruction_state = vec![
         vec![0,0,1],
-        vec![1,2,2],
+        vec![1,1,1],
         vec![2,2,2]
     ];
+
+
+    // println!("--------------- SOUSTRAIRE 1 ---------------");
+    // let mut instruction_write = vec![
+    //     vec![0,1,2], 
+    //     vec![1,0,2],
+    //     vec![0,1,2]
+    // ];
+    // encode_instruction_write(&mut instruction_write, &ctx);
+
+    // let instruction_position = vec![ 
+    //     vec!['D','D','G'], 
+    //     vec!['G','G','G'],
+    //     vec!['N','N','N']
+    // ];
+    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
+
+    // let instruction_state = vec![
+    //     vec![0,0,1],
+    //     vec![1,2,2],
+    //     vec![2,2,2]
+    // ];
 
 
     let ct_instruction_write = private_key.encrypt_matrix(&mut ctx, &instruction_write);
