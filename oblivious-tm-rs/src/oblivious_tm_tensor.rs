@@ -1,5 +1,8 @@
 
 const DEBUG: bool = false;
+use std::iter::Inspect;
+use std::time::{Instant, Duration};
+
 use revolut::*;
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
@@ -11,7 +14,7 @@ pub fn oblivious_tm_tensor()
     //The number of steps our Turing Machine will run.
 
     let step = 7;
-    let param = PARAM_MESSAGE_4_CARRY_0;
+    let param = PARAM_MESSAGE_5_CARRY_0;
     let mut ctx = Context::from(param);
     let private_key = PrivateKey::new(&mut ctx);
     let public_key = private_key.get_public_key();
@@ -31,22 +34,22 @@ pub fn oblivious_tm_tensor()
     println!("State Encrypted");
 
 
-    // println!("---------------  MUTIPLICATION BY 2 ---------------");
-    // let mut instruction_write = vec![
-    //     vec![0,1,0], 
-    //     vec![0,1,2]
+    println!("---------------  MUTIPLICATION BY 2 ---------------");
+    let mut instruction_write = vec![
+        vec![0,1,0], 
+        vec![0,1,2]
 
-    // ];
-    // encode_instruction_write(&mut instruction_write, &ctx);
-    // let instruction_position = vec![
-    //     vec!['D','D','N'],
-    //     vec!['N','N','N']
-    // ];
-    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
-    // let instruction_state = vec![
-    //     vec![0,0,1],
-    //     vec![1,1,1]
-    // ];
+    ];
+    encode_instruction_write(&mut instruction_write, &ctx);
+    let instruction_position = vec![
+        vec!['D','D','N'],
+        vec!['N','N','N']
+    ];
+    let instruction_position = encode_instruction_position(&instruction_position, &ctx);
+    let instruction_state = vec![
+        vec![0,0,1],
+        vec![1,1,1]
+    ];
 
 
     // println!("---------------  INVERSE 0 and 1 ---------------");
@@ -69,26 +72,26 @@ pub fn oblivious_tm_tensor()
     // ];
 
 
-    println!("--------------- SOUSTRAIRE 1 ---------------");
-    let mut instruction_write = vec![
-        vec![0,1,2], 
-        vec![1,0,2],
-        vec![0,1,2]
-    ];
-    encode_instruction_write(&mut instruction_write, &ctx);
+    // println!("--------------- SOUSTRAIRE 1 ---------------");
+    // let mut instruction_write = vec![
+    //     vec![0,1,2], 
+    //     vec![1,0,2],
+    //     vec![0,1,2]
+    // ];
+    // encode_instruction_write(&mut instruction_write, &ctx);
 
-    let instruction_position = vec![ 
-        vec!['D','D','G'], 
-        vec!['G','G','G'],
-        vec!['N','N','N']
-    ];
-    let instruction_position = encode_instruction_position(&instruction_position, &ctx);
+    // let instruction_position = vec![ 
+    //     vec!['D','D','G'], 
+    //     vec!['G','G','G'],
+    //     vec!['N','N','N']
+    // ];
+    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
 
-    let instruction_state = vec![
-        vec![0,0,1],
-        vec![1,2,2],
-        vec![2,2,2]
-    ];
+    // let instruction_state = vec![
+    //     vec![0,0,1],
+    //     vec![1,2,2],
+    //     vec![2,2,2]
+    // ];
 
 
     let instruction_table = vec![instruction_write,instruction_position,instruction_state];
@@ -101,28 +104,41 @@ pub fn oblivious_tm_tensor()
     let mut nb_of_move = public_key.allocate_and_trivially_encrypt_lwe(0, &ctx);
     println!("Oblivious TM Start..");
 
-    
+
+    let mut total_time_step = Duration::new(0, 0);
     for i in 0..step {
 
         println!("--- STEP {} ",i);
+        let start_time_step = Instant::now();
 
         let cell_content = read_cell_content(&tape, &public_key, &ctx);
-
         if DEBUG {
         private_key.debug_lwe("State ", &state, &ctx); //line
         private_key.debug_lwe("Cell content", &cell_content, &ctx); //column
         }
-
         state = get_new_state_after_writing_and_moving(&mut tape, &cell_content, &state, &ct_tensor_instruction, &mut nb_of_move, public_key, &ctx, &private_key);
 
-        print!("New Tape : ");
-        tape.print(&private_key, &ctx);
+        let elapsed_time_step = start_time_step.elapsed();
+        total_time_step += elapsed_time_step;
+
+        if DEBUG {
+            print!("New Tape : ");
+            tape.print(&private_key, &ctx);
+        }
 
     }
 
+
+    let average_time_step = total_time_step / step;
+    println!("Temps moyen d'execution d'un step avec BMA : {:?}", average_time_step);
+
+
+    
     println!("Oblivious TM End... \nReordering the tape..");
     public_key.wrapping_neg_lwe(&mut nb_of_move);
     blind_rotate_assign(&nb_of_move, &mut tape.0, &public_key.fourier_bsk);
+    
+    
 
 
 
