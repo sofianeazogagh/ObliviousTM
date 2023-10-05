@@ -219,7 +219,7 @@ pub fn read_cell_content(
 
 
 /// Encode the matrix instruction_write appropriatly
-fn encode_instruction_write(
+pub fn encode_instruction_write(
     instruction_write : &mut Vec<Vec<u64>>,
     ctx: &Context
 )
@@ -227,6 +227,7 @@ fn encode_instruction_write(
     let rows = instruction_write.len();
 
     for i in 0..rows {
+        println!("test");
         // Read 0
         match instruction_write[i][0] {
             0 => instruction_write[i][0] = 0,
@@ -243,22 +244,18 @@ fn encode_instruction_write(
         }
 
         // Read 2
-        match instruction_write[i][2] {
-            0 => instruction_write[i][2] = 2,
-            1 => instruction_write[i][2] = 3,
-            2 => instruction_write[i][2] = 0,
-            _ => (),
-        }
+
+
     }
 }
 
 
 
 /// Encode the matrix instruction_position appropriatly
-fn encode_instruction_position(
+pub fn encode_instruction_position(
     instruction_position: &Vec<Vec<char>>,
     ctx: &Context
-) -> Vec<Vec<u64>> 
+) -> Vec<Vec<u64>>
 {
     let encoded_matrix: Vec<Vec<u64>> = instruction_position
         .iter()
@@ -281,14 +278,14 @@ fn encode_instruction_position(
 
 
 pub fn encode_tensor_into_matrix(channels : Vec<Vec<Vec<u64>>>)
--> Vec<Vec<u64>>
+                                 -> Vec<Vec<u64>>
 {
 
     let t_rows = channels[0].len()*3;
     let t_col = channels[0][0].len();
 
     let mut tensor_encoded = vec![vec![0; t_col]; t_rows];
-    
+
 
     for i in 0.. channels[0].len(){
         for j in 0..t_col{
@@ -296,7 +293,7 @@ pub fn encode_tensor_into_matrix(channels : Vec<Vec<Vec<u64>>>)
                 tensor_encoded[i*3 + k][j] = channels[k][i][j];
             }
         }
-    
+
     }
 
     tensor_encoded

@@ -67,7 +67,7 @@ pub fn main() {
 
 pub fn test_step(){
 
-    let param = PARAM_MESSAGE_6_CARRY_0;
+    let param = PARAM_MESSAGE_3_CARRY_0;
     let mut ctx = Context::from(param);
     let private_key = PrivateKey::new(&mut ctx);
     let public_key = private_key.get_public_key();
@@ -114,7 +114,7 @@ pub fn test_step(){
 
     let instruction_table = vec![instruction_write,instruction_position,instruction_state];
     let tensor_instruction = encode_tensor_into_matrix(instruction_table);
-    let ct_tensor_instruction = private_key.encrypt_matrix_with_padding(&mut ctx, &tensor_instruction);
+    let ct_tensor_instruction = private_key.encrypt_matrix(&mut ctx, &tensor_instruction);
 
     let mut nb_of_move = public_key.allocate_and_trivially_encrypt_lwe(0, &ctx);
 
