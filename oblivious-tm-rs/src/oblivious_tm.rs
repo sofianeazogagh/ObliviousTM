@@ -1,6 +1,8 @@
 
 const DEBUG: bool = false;
 
+use std::time::{Instant, Duration};
+
 use revolut::*;
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
@@ -12,7 +14,7 @@ pub fn oblivious_tm()
     //The number of steps our Turing Machine will run.
 
     let step = 7;
-    let param = PARAM_MESSAGE_4_CARRY_0;
+    let param = PARAM_MESSAGE_5_CARRY_0;
     let mut ctx = Context::from(param);
     let private_key = PrivateKey::new(&mut ctx);
     let public_key = private_key.get_public_key();
@@ -32,41 +34,42 @@ pub fn oblivious_tm()
     println!("State Encrypted");
 
 
-    // println!("---------------  MUTIPLICATION BY 2 ---------------");
-    // let mut instruction_write = vec![
-    //     vec![0,1,0], 
-    //     vec![0,1,2]
-
-    // ];
-    // encode_instruction_write(&mut instruction_write, &ctx);
-    // let instruction_position = vec![ // mouvement de la tête à gauche = mouvement de la bande à droite = rotation de 31
-    //     vec![1,1,0], // mouvement de la tête à droite = mouvement de la bande à gauche = rotation de 1
-    //     vec![0,0,0]
-    // ];
-    // let instruction_state = vec![
-    //     vec![0,0,1],
-    //     vec![1,1,1]
-    // ];
-
-
-    println!("---------------  INVERSE 0 and 1 ---------------");
-    let mut instruction_write = vec![ 
-        vec![1,0,2],
-        vec![0,1,2],
+    println!("---------------  MUTIPLICATION BY 2 ---------------");
+    let mut instruction_write = vec![
+        vec![0,1,0], 
         vec![0,1,2]
+
     ];
     encode_instruction_write(&mut instruction_write, &ctx);
     let instruction_position = vec![
         vec!['D','D','N'],
-        vec!['N','N','N'],
         vec!['N','N','N']
     ];
     let instruction_position = encode_instruction_position(&instruction_position, &ctx);
     let instruction_state = vec![
         vec![0,0,1],
-        vec![1,1,1],
-        vec![2,2,2]
+        vec![1,1,1]
     ];
+
+
+    // println!("---------------  INVERSE 0 and 1 ---------------");
+    // let mut instruction_write = vec![ 
+    //     vec![1,0,2],
+    //     vec![0,1,2],
+    //     vec![0,1,2]
+    // ];
+    // encode_instruction_write(&mut instruction_write, &ctx);
+    // let instruction_position = vec![
+    //     vec!['D','D','N'],
+    //     vec!['N','N','N'],
+    //     vec!['N','N','N']
+    // ];
+    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
+    // let instruction_state = vec![
+    //     vec![0,0,1],
+    //     vec![1,1,1],
+    //     vec![2,2,2]
+    // ];
 
 
     // println!("--------------- SOUSTRAIRE 1 ---------------");
@@ -91,6 +94,7 @@ pub fn oblivious_tm()
     // ];
 
 
+
     let ct_instruction_write = private_key.encrypt_matrix(&mut ctx, &instruction_write);
     let ct_instruction_position = private_key.encrypt_matrix(&mut ctx, &instruction_position);
     let ct_instruction_state = private_key.encrypt_matrix(&mut ctx, &instruction_state);
@@ -98,26 +102,37 @@ pub fn oblivious_tm()
     println!("Instructions Encrypted");
 
     let mut nb_of_move = public_key.allocate_and_trivially_encrypt_lwe(0, &ctx);
-
     println!("Oblivious TM Start..");
+
+    let mut total_time_step = Duration::new(0, 0);
     for i in 0..step {
 
         println!("--- STEP {} ",i);
+        let start_time_step = Instant::now();
 
         let cell_content = read_cell_content(&tape, &public_key, &ctx);
-
         if DEBUG {
         private_key.debug_lwe("State ", &state, &ctx); //line
         private_key.debug_lwe("Cell content", &cell_content, &ctx); //column
         }
-
         write_new_cell_content(&mut tape, &cell_content, &state, &ct_instruction_write, public_key, &ctx,&private_key);
         change_head_position(&mut tape, &cell_content, &state, &ct_instruction_position, public_key, &ctx, &mut nb_of_move, &private_key); 
         state = get_new_state(&cell_content, &state, &ct_instruction_state, public_key, &ctx,&private_key);
-        print!("New Tape : ");
-        tape.print(&private_key, &ctx);
+
+        let elapsed_time_step = start_time_step.elapsed();
+        total_time_step += elapsed_time_step;
+
+
+        if DEBUG {
+            print!("New Tape : ");
+            tape.print(&private_key, &ctx);
+        }
 
     }
+
+
+    let average_time_step = total_time_step / step;
+    println!("Temps moyen d'execution d'un step avec BMA : {:?}", average_time_step);
 
     println!("Oblivious TM End... \nReordering the tape..");
     public_key.wrapping_neg_lwe(&mut nb_of_move);
@@ -127,10 +142,6 @@ pub fn oblivious_tm()
 
     println!("---------------  FINAL TAPE ---------------");
     tape.print(&private_key, &ctx);
-
-
-    
-
 
 
 }
@@ -224,14 +235,14 @@ fn encode_instruction_write(
     let rows = instruction_write.len();
 
     for i in 0..rows {
-        // Lis 0
+        // Read 0
         match instruction_write[i][0] {
             0 => instruction_write[i][0] = 0,
             1 => instruction_write[i][0] = (ctx.message_modulus().0 - 1) as u64,
             2 => instruction_write[i][0] = (ctx.message_modulus().0 - 2) as u64,
             _ => (),
         }
-        // Lis 1
+        // Read 1
         match instruction_write[i][1] {
             0 => instruction_write[i][1] = 1,
             1 => instruction_write[i][1] = 0,
@@ -239,7 +250,7 @@ fn encode_instruction_write(
             _ => (),
         }
 
-        // Lis 2
+        // Read 2
         match instruction_write[i][2] {
             0 => instruction_write[i][2] = 2,
             1 => instruction_write[i][2] = 3,
@@ -251,7 +262,7 @@ fn encode_instruction_write(
 
 
 
-
+/// Encode the matrix instruction_position appropriatly
 fn encode_instruction_position(
     instruction_position: &Vec<Vec<char>>,
     ctx: &Context
@@ -265,7 +276,7 @@ fn encode_instruction_position(
                     'D' => 1,
                     'G' => (2*ctx.message_modulus().0 - 1) as u64,
                     'N' => 0,
-                    _ => unreachable!(), // Ce cas ne devrait pas se produire si votre matrice ne contient que 'D', 'G' et 'N'
+                    _ => unreachable!(),
                 })
                 .collect()
         })

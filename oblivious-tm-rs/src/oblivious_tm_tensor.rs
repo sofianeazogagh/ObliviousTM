@@ -1,5 +1,8 @@
 
 const DEBUG: bool = false;
+use std::iter::Inspect;
+use std::time::{Instant, Duration};
+
 use revolut::*;
 use tfhe::shortint::parameters::*;
 use tfhe::core_crypto::prelude::*;
@@ -11,7 +14,7 @@ pub fn oblivious_tm_tensor()
     //The number of steps our Turing Machine will run.
 
     let step = 7;
-    let param = PARAM_MESSAGE_4_CARRY_0;
+    let param = PARAM_MESSAGE_5_CARRY_0;
     let mut ctx = Context::from(param);
     let private_key = PrivateKey::new(&mut ctx);
     let public_key = private_key.get_public_key();
@@ -19,7 +22,7 @@ pub fn oblivious_tm_tensor()
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![1,0,];
+    let mut tape = vec![1,0,1,1];
     while tape.len() < ctx.message_modulus().0 {
         tape.push(2_u64);
     }
@@ -31,63 +34,63 @@ pub fn oblivious_tm_tensor()
     println!("State Encrypted");
 
 
-    // println!("---------------  MUTIPLICATION BY 2 ---------------");
-    // let mut instruction_write = vec![
-    //     vec![0,1,0], 
-    //     vec![0,1,2]
-
-    // ];
-    // encode_instruction_write(&mut instruction_write, &ctx);
-    // let instruction_position = vec![
-    //     vec!['D','D','N'],
-    //     vec!['N','N','N']
-    // ];
-    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
-    // let instruction_state = vec![
-    //     vec![0,0,1],
-    //     vec![1,1,1]
-    // ];
-
-
-    println!("---------------  INVERSE 0 and 1 ---------------");
+    println!("---------------  MUTIPLICATION BY 2 ---------------");
     let mut instruction_write = vec![
-        vec![1,0,2],
-        vec![0,1,2],
+        vec![0,1,0], 
         vec![0,1,2]
+
     ];
     encode_instruction_write(&mut instruction_write, &ctx);
     let instruction_position = vec![
         vec!['D','D','N'],
-        vec!['N','N','N'],
         vec!['N','N','N']
     ];
     let instruction_position = encode_instruction_position(&instruction_position, &ctx);
     let instruction_state = vec![
         vec![0,0,1],
-        vec![1,1,1],
-        vec![2,2,2]
+        vec![1,1,1]
     ];
+
+
+    // println!("---------------  INVERSE 0 and 1 ---------------");
+    // let mut instruction_write = vec![ 
+    //     vec![1,0,2],
+    //     vec![0,1,2],
+    //     vec![0,1,2]
+    // ];
+    // encode_instruction_write(&mut instruction_write, &ctx);
+    // let instruction_position = vec![
+    //     vec!['D','D','N'],
+    //     vec!['N','N','N'],
+    //     vec!['N','N','N']
+    // ];
+    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
+    // let instruction_state = vec![
+    //     vec![0,0,1],
+    //     vec![1,1,1],
+    //     vec![2,2,2]
+    // ];
 
 
     // println!("--------------- SOUSTRAIRE 1 ---------------");
     // let mut instruction_write = vec![
-    //     vec![0,1,],
-    //     vec![1,0,],
-    //
+    //     vec![0,1,2], 
+    //     vec![1,0,2],
+    //     vec![0,1,2]
     // ];
     // encode_instruction_write(&mut instruction_write, &ctx);
-    //
-    // let instruction_position = vec![
-    //     vec!['D','D',],
-    //     vec!['G','G',],
-    //
+
+    // let instruction_position = vec![ 
+    //     vec!['D','D','G'], 
+    //     vec!['G','G','G'],
+    //     vec!['N','N','N']
     // ];
     // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
-    //
+
     // let instruction_state = vec![
-    //     vec![0,0],
-    //     vec![1,2],
-    //
+    //     vec![0,0,1],
+    //     vec![1,2,2],
+    //     vec![2,2,2]
     // ];
 
 
@@ -101,28 +104,41 @@ pub fn oblivious_tm_tensor()
     let mut nb_of_move = public_key.allocate_and_trivially_encrypt_lwe(0, &ctx);
     println!("Oblivious TM Start..");
 
-    
+
+    let mut total_time_step = Duration::new(0, 0);
     for i in 0..step {
 
         println!("--- STEP {} ",i);
+        let start_time_step = Instant::now();
 
         let cell_content = read_cell_content(&tape, &public_key, &ctx);
-
         if DEBUG {
         private_key.debug_lwe("State ", &state, &ctx); //line
         private_key.debug_lwe("Cell content", &cell_content, &ctx); //column
         }
-
         state = get_new_state_after_writing_and_moving(&mut tape, &cell_content, &state, &ct_tensor_instruction, &mut nb_of_move, public_key, &ctx, &private_key);
 
-        print!("New Tape : ");
-        tape.print(&private_key, &ctx);
+        let elapsed_time_step = start_time_step.elapsed();
+        total_time_step += elapsed_time_step;
+
+        if DEBUG {
+            print!("New Tape : ");
+            tape.print(&private_key, &ctx);
+        }
 
     }
 
+
+    let average_time_step = total_time_step / step;
+    println!("Temps moyen d'execution d'un step avec BMA : {:?}", average_time_step);
+
+
+    
     println!("Oblivious TM End... \nReordering the tape..");
     public_key.wrapping_neg_lwe(&mut nb_of_move);
     blind_rotate_assign(&nb_of_move, &mut tape.0, &public_key.fourier_bsk);
+    
+    
 
 
 
@@ -203,7 +219,7 @@ pub fn read_cell_content(
 
 
 /// Encode the matrix instruction_write appropriatly
-pub fn encode_instruction_write(
+fn encode_instruction_write(
     instruction_write : &mut Vec<Vec<u64>>,
     ctx: &Context
 )
@@ -211,7 +227,6 @@ pub fn encode_instruction_write(
     let rows = instruction_write.len();
 
     for i in 0..rows {
-
         // Read 0
         match instruction_write[i][0] {
             0 => instruction_write[i][0] = 0,
@@ -228,19 +243,19 @@ pub fn encode_instruction_write(
         }
 
         // Read 2
-        // match instruction_write[i][2] {
-        //     0 => instruction_write[i][2] = 2,
-        //     1 => instruction_write[i][2] = 3,
-        //     2 => instruction_write[i][2] = 0,
-        //     _ => (),
-        // }
+        match instruction_write[i][2] {
+            0 => instruction_write[i][2] = 2,
+            1 => instruction_write[i][2] = 3,
+            2 => instruction_write[i][2] = 0,
+            _ => (),
+        }
     }
 }
 
 
 
 /// Encode the matrix instruction_position appropriatly
-pub fn encode_instruction_position(
+fn encode_instruction_position(
     instruction_position: &Vec<Vec<char>>,
     ctx: &Context
 ) -> Vec<Vec<u64>> 
