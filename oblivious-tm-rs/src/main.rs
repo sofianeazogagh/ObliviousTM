@@ -67,7 +67,7 @@ pub fn main() {
 
 pub fn test_step(){
 
-    let param = PARAM_MESSAGE_3_CARRY_0;
+    let param = PARAM_MESSAGE_6_CARRY_0;
     let mut ctx = Context::from(param);
     let private_key = PrivateKey::new(&mut ctx);
     let public_key = private_key.get_public_key();
