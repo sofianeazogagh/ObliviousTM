@@ -318,7 +318,7 @@ checksum = "2962bf2e1f971c53ef59b2d7ca51d6a5e5c4a9d2be47eb1f661a321a4da85888"
 [[package]]
 name = "revolut"
 version = "0.1.0"
-source = "git+https://github.com/sofianeazogagh/revoLUT.git?branch=main#d2d2f5e167083d921a595ada9ada66357d8dc02e"
+source = "git+https://github.com/sofianeazogagh/revoLUT.git?branch=main#3282c760d021f402baf76b918cc37f569fe847db"
 dependencies = [
  "aligned-vec",
  "arrayvec",

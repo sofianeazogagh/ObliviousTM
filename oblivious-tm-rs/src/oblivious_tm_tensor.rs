@@ -19,7 +19,7 @@ pub fn oblivious_tm_tensor()
     println!("Key generated");
 
     //creation of tape
-    let mut tape = vec![1,0,1,1];
+    let mut tape = vec![1,0,];
     while tape.len() < ctx.message_modulus().0 {
         tape.push(2_u64);
     }
@@ -49,46 +49,46 @@ pub fn oblivious_tm_tensor()
     // ];
 
 
-    // println!("---------------  INVERSE 0 and 1 ---------------");
-    // let mut instruction_write = vec![ 
-    //     vec![1,0,2],
-    //     vec![0,1,2],
-    //     vec![0,1,2]
-    // ];
-    // encode_instruction_write(&mut instruction_write, &ctx);
-    // let instruction_position = vec![
-    //     vec!['D','D','N'],
-    //     vec!['N','N','N'],
-    //     vec!['N','N','N']
-    // ];
-    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
-    // let instruction_state = vec![
-    //     vec![0,0,1],
-    //     vec![1,1,1],
-    //     vec![2,2,2]
-    // ];
-
-
-    println!("--------------- SOUSTRAIRE 1 ---------------");
+    println!("---------------  INVERSE 0 and 1 ---------------");
     let mut instruction_write = vec![
-        vec![0,1,2], 
         vec![1,0,2],
+        vec![0,1,2],
         vec![0,1,2]
     ];
     encode_instruction_write(&mut instruction_write, &ctx);
-
-    let instruction_position = vec![ 
-        vec!['D','D','G'], 
-        vec!['G','G','G'],
+    let instruction_position = vec![
+        vec!['D','D','N'],
+        vec!['N','N','N'],
         vec!['N','N','N']
     ];
     let instruction_position = encode_instruction_position(&instruction_position, &ctx);
-
     let instruction_state = vec![
         vec![0,0,1],
-        vec![1,2,2],
+        vec![1,1,1],
         vec![2,2,2]
     ];
+
+
+    // println!("--------------- SOUSTRAIRE 1 ---------------");
+    // let mut instruction_write = vec![
+    //     vec![0,1,],
+    //     vec![1,0,],
+    //
+    // ];
+    // encode_instruction_write(&mut instruction_write, &ctx);
+    //
+    // let instruction_position = vec![
+    //     vec!['D','D',],
+    //     vec!['G','G',],
+    //
+    // ];
+    // let instruction_position = encode_instruction_position(&instruction_position, &ctx);
+    //
+    // let instruction_state = vec![
+    //     vec![0,0],
+    //     vec![1,2],
+    //
+    // ];
 
 
     let instruction_table = vec![instruction_write,instruction_position,instruction_state];
@@ -203,7 +203,7 @@ pub fn read_cell_content(
 
 
 /// Encode the matrix instruction_write appropriatly
-fn encode_instruction_write(
+pub fn encode_instruction_write(
     instruction_write : &mut Vec<Vec<u64>>,
     ctx: &Context
 )
@@ -211,6 +211,7 @@ fn encode_instruction_write(
     let rows = instruction_write.len();
 
     for i in 0..rows {
+
         // Read 0
         match instruction_write[i][0] {
             0 => instruction_write[i][0] = 0,
@@ -227,19 +228,19 @@ fn encode_instruction_write(
         }
 
         // Read 2
-        match instruction_write[i][2] {
-            0 => instruction_write[i][2] = 2,
-            1 => instruction_write[i][2] = 3,
-            2 => instruction_write[i][2] = 0,
-            _ => (),
-        }
+        // match instruction_write[i][2] {
+        //     0 => instruction_write[i][2] = 2,
+        //     1 => instruction_write[i][2] = 3,
+        //     2 => instruction_write[i][2] = 0,
+        //     _ => (),
+        // }
     }
 }
 
 
 
 /// Encode the matrix instruction_position appropriatly
-fn encode_instruction_position(
+pub fn encode_instruction_position(
     instruction_position: &Vec<Vec<char>>,
     ctx: &Context
 ) -> Vec<Vec<u64>> 

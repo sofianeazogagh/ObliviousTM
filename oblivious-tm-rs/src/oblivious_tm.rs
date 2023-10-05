@@ -215,8 +215,6 @@ pub fn get_new_state(
 }
 
 
-
-
 /// Encode the matrix instruction_write appropriatly
 fn encode_instruction_write(
     instruction_write : &mut Vec<Vec<u64>>,
