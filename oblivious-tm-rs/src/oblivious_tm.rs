@@ -1,6 +1,8 @@
 
 const DEBUG: bool = false;
 
+use std::fs::*;
+use std::io::Write;
 use std::time::{Instant, Duration};
 
 use revolut::*;
@@ -284,3 +286,187 @@ fn encode_instruction_position(
 
     encoded_matrix
 }
+
+
+fn generate_matrix(n: usize, m: usize, p: u64) -> Vec<Vec<u64>> {
+    let mut matrix = Vec::with_capacity(n);
+    for _ in 0..n {
+        let row = (0..m).map(|_| 0).collect();
+        matrix.push(row);
+    }
+    matrix
+}
+
+
+
+pub fn compare_performance_step_with_bma_leaky() {
+
+
+
+    //Fichier resultat
+    let mut output_file_step = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("resultats_step_with_bma_leaky.txt")
+        .expect("Impossible d'ouvrir le fichier");
+
+    // En tête
+    // writeln!(output_file_step, "execution,matrix_size,params,time").expect("Impossible d'écrire dans le fichier");
+
+    let params_crypto = vec![PARAM_MESSAGE_4_CARRY_0,PARAM_MESSAGE_5_CARRY_0];
+
+    // let params_crypto = vec![PARAM_MESSAGE_5_CARRY_0];
+
+    for params in params_crypto {
+
+
+        let mut ctx = Context::from(params);
+        let private_key = PrivateKey::new(&mut ctx);
+        let public_key = &private_key.public_key;
+
+        let matrix_size = vec![(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10),
+        (11,11),(12,12),(13,14),(15,15),(16,16),(16,16),(17,17),(18,18),(19,19),(20,20),(21,21)];
+
+        let mut i = 0;
+        for (n,m) in matrix_size{
+
+
+            if params.message_modulus.0 >= n{
+                i+=1;
+                println!("calcul {i}");
+
+                let matrix0 = generate_matrix(n, m, ctx.full_message_modulus() as u64);
+                let matrix1 = generate_matrix(n, m, ctx.full_message_modulus() as u64);
+                let matrix2 = generate_matrix(n, m, ctx.full_message_modulus() as u64);
+
+
+                let ct_matrix0 = private_key.encrypt_matrix(&mut ctx, &matrix0);
+                let ct_matrix1 = private_key.encrypt_matrix(&mut ctx, &matrix1);
+                let ct_matrix2 = private_key.encrypt_matrix(&mut ctx, &matrix2);
+
+                let mut nb_of_move = public_key.allocate_and_trivially_encrypt_lwe(0, &ctx);
+
+                //creation of tape
+                let mut tape = vec![1,0,];
+                while tape.len() < ctx.message_modulus().0 {
+                    tape.push(2_u64);
+                }
+
+                let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
+                let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
+
+
+                let num_iterations = 25;
+                for execution in 0..num_iterations {
+
+
+                    // Temps d'exécution de la première fonction (BMA)
+                    let start_time_step = Instant::now();
+                    let cell_content = read_cell_content(&tape, &public_key, &ctx);
+                    write_new_cell_content(&mut tape, &cell_content, &state, &ct_matrix0, public_key, &ctx,&private_key);
+                    change_head_position(&mut tape, &cell_content, &state, &ct_matrix1, public_key, &ctx, &mut nb_of_move, &private_key); 
+                    state = get_new_state(&cell_content, &state, &ct_matrix2, public_key, &ctx,&private_key);
+                    let elapsed_time_step = start_time_step.elapsed();
+
+
+                    // Écrire les temps dans le fichier
+                    writeln!(output_file_step, "{:?},{:?},{:?},{:?}",execution,n,params.message_modulus.0,elapsed_time_step.as_millis()).expect("Impossible d'écrire dans le fichier");
+
+                }
+            }
+
+        }
+    }
+
+
+
+
+
+}
+
+pub fn compare_performance_step_with_bma_robust(){
+
+
+
+    //Fichier resultat
+    let mut output_file_step = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("resultats_step_with_bma_robust.txt")
+        .expect("Impossible d'ouvrir le fichier");
+
+    // En tête
+    writeln!(output_file_step, "execution,matrix_size,params,time").expect("Impossible d'écrire dans le fichier");
+
+
+    let params_crypto = vec![PARAM_MESSAGE_3_CARRY_0,PARAM_MESSAGE_4_CARRY_0,PARAM_MESSAGE_5_CARRY_0];
+
+
+    for params in params_crypto {
+
+
+        let mut ctx = Context::from(params);
+        let private_key = PrivateKey::new(&mut ctx);
+        let public_key = &private_key.public_key;
+
+        let matrix_size = vec![(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10),
+        (11,11),(12,12),(13,13),(14,14),(15,15),(16,16),(17,17),(18,18),(19,19),(20,20),(21,21)];
+
+        let mut i = 0;
+        for (n,m) in matrix_size{
+
+
+            if params.message_modulus.0 >= n{
+                i+=1;
+                println!("calcul {i}");
+
+                let matrix0 = generate_matrix(n, m, ctx.full_message_modulus() as u64);
+                let matrix1 = generate_matrix(n, m, ctx.full_message_modulus() as u64);
+                let matrix2 = generate_matrix(n, m, ctx.full_message_modulus() as u64);
+
+
+                let ct_matrix0 = private_key.encrypt_matrix_with_padding(&mut ctx, &matrix0);
+                let ct_matrix1 = private_key.encrypt_matrix_with_padding(&mut ctx, &matrix1);
+                let ct_matrix2 = private_key.encrypt_matrix_with_padding(&mut ctx, &matrix2);
+
+                let mut nb_of_move = public_key.allocate_and_trivially_encrypt_lwe(0, &ctx);
+
+                //creation of tape
+                let mut tape = vec![1,0,];
+                while tape.len() < ctx.message_modulus().0 {
+                    tape.push(2_u64);
+                }
+
+                let mut tape = LUT::from_vec(&tape, &private_key, &mut ctx);
+                let mut state = private_key.allocate_and_encrypt_lwe(0, &mut ctx);
+
+
+                let num_iterations = 25;
+                for execution in 0..num_iterations {
+
+
+                    // Temps d'exécution de la première fonction (BMA)
+                    let start_time_step = Instant::now();
+                    let cell_content = read_cell_content(&tape, &public_key, &ctx);
+                    write_new_cell_content(&mut tape, &cell_content, &state, &ct_matrix0, public_key, &ctx,&private_key);
+                    change_head_position(&mut tape, &cell_content, &state, &ct_matrix1, public_key, &ctx, &mut nb_of_move, &private_key); 
+                    state = get_new_state(&cell_content, &state, &ct_matrix2, public_key, &ctx,&private_key);
+                    let elapsed_time_step = start_time_step.elapsed();
+
+
+                    // Écrire les temps dans le fichier
+                    writeln!(output_file_step, "{:?},{:?},{:?},{:?}",execution,n,params.message_modulus.0,elapsed_time_step.as_millis()).expect("Impossible d'écrire dans le fichier");
+
+                }
+            }
+
+        }
+    }
+
+
+
+
+
+}
+
+
