@@ -34,7 +34,7 @@ cargo build
 3. Navigate to the project directory:
 
 ```bash
-cd oblivious-turing-machine
+cd oblivious-tm-rs
 ```
 
 4. Make sure the `otm.sh` script is executable:
