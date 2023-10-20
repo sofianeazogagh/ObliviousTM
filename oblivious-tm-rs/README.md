@@ -2,15 +2,34 @@
 
 This script allows you to execute a proof of concept of an Oblivious Turing Machine with various configurations.
 
-## Usage
+## Dependancies 
 
-1. Ensure you have Rust and Cargo installed on your system.
+You need to install Rust and Cargo to use it with tfhe-rs.
 
-2. Clone the repository:
-
+First, install the needed Rust toolchain:
 ```bash
-git clone https://github.com/yourusername/oblivious-turing-machine.git
+rustup toolchain install nightly
 ```
+
+Then, you can either:
+
+1. Manually specify the toolchain to use in each of the cargo commands:
+For example:
+```bash
+cargo +nightly build
+cargo +nightly run
+```
+2. Or override the toolchain to use for the current project:
+```bash
+rustup override set nightly
+```
+
+Cargo will use the `nightly` toolchain.
+```
+cargo build
+```
+
+## Usage 
 
 3. Navigate to the project directory:
 
@@ -55,4 +74,3 @@ This command will execute the Oblivious Turing Machine with the following config
 ---
 
 Please make sure to customize the placeholders (e.g., `https://github.com/yourusername/oblivious-turing-machine.git`) with your actual repository URL and adjust any other details specific to your project.
-```
