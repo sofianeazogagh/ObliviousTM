@@ -2,9 +2,9 @@
 
 This script allows you to execute a proof of concept of an Oblivious Turing Machine with various configurations.
 
-## Dependancies 
+## Dependencies 
 
-You need to install Rust and Cargo to use it with tfhe-rs.
+You need to install Rust and Cargo to use tfhe-rs.
 
 First, install the needed Rust toolchain:
 ```bash
